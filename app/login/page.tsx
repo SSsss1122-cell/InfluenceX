@@ -1,3 +1,7 @@
+'use client';
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import AuthCard from "../../components/AuthCard";
 
 export default function Home() {

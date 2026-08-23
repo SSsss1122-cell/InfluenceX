@@ -1,93 +1,111 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MapPin, Users, Star } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
-const influencers = [
-  {
-    id: 1,
-    name: 'Sarah Johnson',
-    handle: '@sarahstyle',
-    category: 'Fashion & Lifestyle',
-    followers: '1.2M',
-    location: 'New York, USA',
-    rating: 4.9,
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTgWgQUNf5_FdslPd_joWFiXuQayMvk1tsT34SdqY3m5Q&s=10',
-  },
-  {
-    id: 2,
-    name: 'Alex Rivera',
-    handle: '@alexfitness',
-    category: 'Fitness & Health',
-    followers: '856K',
-    location: 'Los Angeles, USA',
-    rating: 4.8,
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face',
-  },
-  {
-    id: 3,
-    name: 'Maya Chen',
-    handle: '@mayafoodie',
-    category: 'Food & Travel',
-    followers: '2.1M',
-    location: 'London, UK',
-    rating: 4.9,
-    image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face',
-  },
-  {
-    id: 4,
-    name: 'James Park',
-    handle: '@jamesbeats',
-    category: 'Music & Entertainment',
-    followers: '1.5M',
-    location: 'Seoul, South Korea',
-    rating: 4.7,
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face',
-  },
-  {
-    id: 5,
-    name: 'Emma Watson',
-    handle: '@emmaexplores',
-    category: 'Travel & Adventure',
-    followers: '3.2M',
-    location: 'Sydney, Australia',
-    rating: 4.9,
-    image: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=400&h=400&fit=crop&crop=face',
-  },
-  {
-    id: 6,
-    name: 'Carlos Garcia',
-    handle: '@carlosfit',
-    category: 'Fitness & Wellness',
-    followers: '624K',
-    location: 'Madrid, Spain',
-    rating: 4.6,
-    image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face',
-  },
-  {
-    id: 7,
-    name: 'Priya Sharma',
-    handle: '@priyabeauty',
-    category: 'Beauty & Skincare',
-    followers: '2.8M',
-    location: 'Mumbai, India',
-    rating: 4.8,
-    image: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=face',
-  },
-  {
-    id: 8,
-    name: 'Tom Mitchell',
-    handle: '@tomtech',
-    category: 'Tech & Gadgets',
-    followers: '1.1M',
-    location: 'San Francisco, USA',
-    rating: 4.7,
-    image: 'https://images.unsplash.com/photo-1500048993953-d23a436266cf?w=400&h=400&fit=crop&crop=face',
-  },
-];
+interface Influencer {
+  id: string;
+  name: string;
+  handle: string;        // username
+  category: string;      // primary niche
+  followers: string;     // formatted, e.g., "1.2M"
+  location: string;      // city + state or just city
+  rating: number;
+  image: string;         // profile image URL
+}
 
-const InfluencerGrid = () => {
+export default function InfluencerGrid() {
+  const [influencers, setInfluencers] = useState<Influencer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Helper: format follower count
+  const formatNumber = (num: number) => {
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+    return num.toString();
+  };
+
+  // Helper: generate a location string from city & state
+  const formatLocation = (city: string, state: string) => {
+    if (city && state) return `${city}, ${state}`;
+    if (city) return city;
+    if (state) return state;
+    return 'India';
+  };
+
+  useEffect(() => {
+    async function fetchInfluencers() {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase
+        .from('influencers')
+        .select('id, name, username, category, city, state, followers, rating, profile_image')
+        .order('created_at', { ascending: false })
+        .limit(8); // fetch exactly 8
+
+      if (error) {
+        console.error('Supabase error (InfluencerGrid):', error);
+        setError('Failed to load influencers.');
+        setInfluencers([]);
+        setLoading(false);
+        return;
+      }
+
+      // Map to the shape expected by the component
+      const formatted: Influencer[] = (data || []).map((inf) => ({
+        id: inf.id,
+        name: inf.name || 'Unknown',
+        handle: inf.username || `@${inf.name?.toLowerCase().replace(/\s/g, '')}`,
+        category: inf.category || 'Creator',
+        followers: formatNumber(Number(inf.followers) || 0),
+        location: formatLocation(inf.city, inf.state),
+        rating: Number(inf.rating) || 4.0,
+        image: inf.profile_image || `https://i.pravatar.cc/400?img=${Math.floor(Math.random() * 70)}`,
+      }));
+
+      setInfluencers(formatted);
+      setLoading(false);
+    }
+
+    fetchInfluencers();
+  }, []);
+
+  if (loading) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-7xl mx-auto text-center">
+          <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Loading top influencers...</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-7xl mx-auto text-center text-red-500">
+          <p>{error}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (influencers.length === 0) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-7xl mx-auto text-center text-gray-500">
+          <p>No influencers found.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
       <div className="max-w-7xl mx-auto">
@@ -123,7 +141,7 @@ const InfluencerGrid = () => {
                 {/* Rating badge */}
                 <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-semibold text-yellow-600 shadow-lg flex items-center gap-1">
                   <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                  {influencer.rating}
+                  {influencer.rating.toFixed(1)}
                 </div>
               </div>
 
@@ -170,6 +188,4 @@ const InfluencerGrid = () => {
       </div>
     </section>
   );
-};
-
-export default InfluencerGrid;
+}

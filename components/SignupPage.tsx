@@ -1,5 +1,5 @@
 "use client";
-
+import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import {
   Mail,
@@ -14,10 +14,13 @@ import {
   Shield,
   Users,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 type Role = "user" | "influencer" | "brand";
 
 export default function SignupPage() {
+  const router = useRouter();
+
   // ─── Theme ──────────────────────────────────────────
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
@@ -37,11 +40,11 @@ export default function SignupPage() {
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   // ─── Form state ─────────────────────────────────────
-  const [name, setName] = useState("");
+ const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [role, setRole] = useState<Role>("user");
+  const [selectedRole, setSelectedRole] = useState<"user" | "influencer" | "brand">("user");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState({
@@ -51,7 +54,12 @@ export default function SignupPage() {
     confirm: false,
   });
 
-  // ─── Password strength (fake) ──────────────────────
+  // ─── UI state ──────────────────────────────────────
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  // ─── Password strength ─────────────────────────────
   const getStrength = () => {
     if (password.length === 0) return 0;
     if (password.length < 6) return 1;
@@ -63,17 +71,50 @@ export default function SignupPage() {
   // ─── Validation ────────────────────────────────────
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ─── Submit with Supabase ──────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setGeneralError(null);
+    setSuccess(false);
+
     const err = {
-      name: name.trim().length < 2,
+      name: fullName.trim().length < 2,
       email: !validateEmail(email),
       password: password.length < 6,
       confirm: password !== confirm || !confirm,
     };
     setErrors(err);
-    if (!err.name && !err.email && !err.password && !err.confirm) {
-      alert("🎉 Account created! (Demo — no backend)");
+
+    if (err.name || err.email || err.password || err.confirm) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: selectedRole,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      setSuccess(true);
+      setLoading(false);
+
+      // Redirect to home page after a short delay
+      setTimeout(() => {
+        router.push("/"); // 👈 Redirect to home
+      }, 2000);
+    } catch (error: any) {
+      setGeneralError(error.message || "Something went wrong. Please try again.");
+      setLoading(false);
     }
   };
 
@@ -97,12 +138,11 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-gradient-to-br from-indigo-50 via-purple-50 to-slate-100 dark:from-[#0b0d15] dark:via-[#1a1d2e] dark:to-[#0b0d15] relative overflow-hidden">
-
-      {/* ─── Background Orbs ────────────────────────── */}
+      {/* Background Orbs */}
       <div className="absolute w-[500px] h-[500px] bg-indigo-300/30 dark:bg-indigo-500/20 rounded-full blur-[120px] -top-40 -left-40 animate-pulse" />
       <div className="absolute w-[400px] h-[400px] bg-purple-300/30 dark:bg-purple-500/20 rounded-full blur-[120px] -bottom-40 -right-40 animate-pulse delay-1000" />
 
-      {/* ─── Theme Toggle ───────────────────────────── */}
+      {/* Theme Toggle */}
       <button
         onClick={toggleTheme}
         className="absolute top-6 right-6 z-50 w-11 h-11 rounded-full bg-white/70 dark:bg-white/10 backdrop-blur border border-white/30 dark:border-white/10 shadow-md flex items-center justify-center text-gray-700 dark:text-white hover:scale-105 transition-transform"
@@ -111,7 +151,7 @@ export default function SignupPage() {
         <ThemeIcon />
       </button>
 
-      {/* ─── LEFT SIDE: Brand / Hero ────────────────── */}
+      {/* LEFT SIDE: Brand / Hero */}
       <div className="w-full md:w-1/2 flex flex-col justify-center items-start p-8 md:p-16 lg:p-20 relative z-10">
         <div className="max-w-md">
           <div className="flex items-center gap-3 mb-4">
@@ -165,7 +205,7 @@ export default function SignupPage() {
         </div>
       </div>
 
-      {/* ─── RIGHT SIDE: Signup Form ────────────────── */}
+      {/* RIGHT SIDE: Signup Form */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-6 md:p-12 relative z-10">
         <div className="w-full max-w-md bg-white/70 dark:bg-white/6 backdrop-blur-2xl border border-white/30 dark:border-white/8 rounded-3xl shadow-2xl dark:shadow-[0_25px_60px_rgba(0,0,0,0.6)] p-8 sm:p-10 transition-all duration-300">
           <div className="text-center mb-6">
@@ -180,9 +220,9 @@ export default function SignupPage() {
               <div className="relative">
                 <input
                   type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Alex Rivera"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Full Name"
                   className={`w-full rounded-2xl border-2 bg-white/50 dark:bg-white/5 backdrop-blur px-4 py-2.5 pr-10 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-white/40 outline-none transition-all ${
                     errors.name
                       ? "border-red-400 shadow-[0_0_0_4px_rgba(248,113,113,0.15)]"
@@ -234,7 +274,7 @@ export default function SignupPage() {
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-                {/* Password strength bar (fake) */}
+                {/* Password strength bar */}
                 {password.length > 0 && (
                   <div className="absolute right-12 top-1/2 -translate-y-1/2 flex gap-0.5">
                     {[1, 2, 3].map((i) => (
@@ -289,9 +329,9 @@ export default function SignupPage() {
                   <button
                     key={r}
                     type="button"
-                    onClick={() => setRole(r)}
+                    onClick={() => setSelectedRole(r)}
                     className={`py-2 rounded-2xl border-2 text-sm font-medium transition-all ${
-                      role === r
+                      selectedRole === r
                         ? "border-indigo-500 bg-indigo-500/10 text-gray-900 dark:text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
                         : "border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/5 text-gray-500 dark:text-white/60 hover:border-indigo-400/40"
                     }`}
@@ -307,12 +347,30 @@ export default function SignupPage() {
               </div>
             </div>
 
+            {/* General error message */}
+            {generalError && (
+              <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-500/10 p-3 rounded-2xl border border-red-200 dark:border-red-500/20">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{generalError}</span>
+              </div>
+            )}
+
+            {/* Success message */}
+            {success && (
+              <div className="flex items-start gap-2 text-sm text-green-600 bg-green-50 dark:bg-green-500/10 p-3 rounded-2xl border border-green-200 dark:border-green-500/20">
+                <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>Account created! Redirecting to home…</span>
+              </div>
+            )}
+
             {/* Submit */}
             <button
               type="submit"
-              className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2.5 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2"
+              disabled={loading || success}
+              className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2.5 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Create Account <ArrowRight className="w-4 h-4" />
+              {loading ? "Creating account…" : "Create Account"}
+              {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
 
             {/* Social */}

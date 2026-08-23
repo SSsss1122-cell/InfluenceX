@@ -134,7 +134,7 @@ const FeaturedProducts = () => {
         {/* Bottom CTA */}
         <div className="text-center mt-12">
           <Link
-            href="/explore"
+            href="/products"
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-white border-2 border-purple-600 text-purple-600 font-semibold hover:bg-purple-50 transition-all duration-300 hover:scale-105 shadow-md"
           >
             Explore All Products

@@ -1,6 +1,7 @@
 "use client";
-
+import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Mail,
   Lock,
@@ -32,6 +33,8 @@ export default function AuthCard() {
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
+  const router = useRouter();
+
   // ─── Tab state ──────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
 
@@ -57,33 +60,92 @@ export default function AuthCard() {
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   // ─── Login submit ─────────────────────────────────
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const err = {
-      email: !validateEmail(loginEmail),
-      password: loginPassword.length < 6,
-    };
-    setLoginErrors(err);
-    if (!err.email && !err.password) {
-      // Simulate success
-      alert("Welcome back! (Demo — no backend)");
-    }
+ const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const email = loginEmail.trim();
+
+  const err = {
+    email: !validateEmail(email),
+    password: loginPassword.length < 6,
   };
 
+  setLoginErrors(err);
+
+  if (err.email || err.password) {
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password: loginPassword,
+  });
+
+  if (error) {
+    console.error("Login error:", error.message);
+    alert(`Login failed: ${error.message}`);
+    return;
+  }
+
+  if (!data.user) {
+    alert("Login failed. User not found.");
+    return;
+  }
+
+  console.log("Login successful:", data.user);
+
+  // Redirect to home page
+  router.push("/");
+  router.refresh();
+};
   // ─── Signup submit ────────────────────────────────
-  const handleSignup = (e: React.FormEvent) => {
-    e.preventDefault();
-    const err = {
-      name: signupName.trim().length < 2,
-      email: !validateEmail(signupEmail),
-      password: signupPassword.length < 6,
-      confirm: signupPassword !== signupConfirm || !signupConfirm,
-    };
-    setSignupErrors(err);
-    if (!err.name && !err.email && !err.password && !err.confirm) {
-      alert("Account created! (Demo — no backend)");
-    }
+  const handleSignup = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const err = {
+    name: signupName.trim().length < 2,
+    email: !validateEmail(signupEmail),
+    password: signupPassword.length < 6,
+    confirm: signupPassword !== signupConfirm || !signupConfirm,
   };
+
+  setSignupErrors(err);
+
+  if (err.name || err.email || err.password || err.confirm) {
+    return;
+  }
+
+  console.log("SIGNUP STARTED");
+  console.log("Email:", signupEmail);
+  console.log("Role:", role);
+
+  const { data, error } = await supabase.auth.signUp({
+    email: loginEmail.trim(),
+    password: loginPassword,
+    options: {
+      data: {
+        full_name: signupName.trim(),
+        role: role,
+      },
+    },
+  });
+
+  console.log("SUPABASE SIGNUP DATA:", data);
+  console.log("SUPABASE SIGNUP ERROR:", error);
+
+  if (error) {
+    alert(`Signup failed: ${error.message}`);
+    return;
+  }
+
+  alert("Account created successfully!");
+
+  setSignupName("");
+  setSignupEmail("");
+  setSignupPassword("");
+  setSignupConfirm("");
+  setActiveTab("login");
+};
 
   // ─── Social demo ──────────────────────────────────
   const socialLogin = (provider: string) => {

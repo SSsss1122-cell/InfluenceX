@@ -1,11 +1,38 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Star } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
-const testimonials = [
+interface Testimonial {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string;
+  review: string;
+  rating: number;
+}
+
+const StarRating = ({ rating }: { rating: number }) => (
+  <div className="flex gap-0.5">
+    {[...Array(5)].map((_, i) => (
+      <Star
+        key={i}
+        className={`w-4 h-4 ${
+          i < rating
+            ? 'fill-yellow-400 text-yellow-400'
+            : 'text-gray-300 fill-gray-300'
+        }`}
+      />
+    ))}
+  </div>
+);
+
+// --- Fallback data (used when Supabase returns empty) ---
+const fallbackTestimonials: Testimonial[] = [
   {
-    id: 1,
+    id: 'fallback-1',
     name: 'Jessica Miller',
     role: 'Marketing Director, GlowCo',
     avatar: 'https://images.unsplash.com/photo-1494790108375-be9c0b0d6d32?w=150&h=150&fit=crop&crop=face',
@@ -14,7 +41,7 @@ const testimonials = [
     rating: 5,
   },
   {
-    id: 2,
+    id: 'fallback-2',
     name: 'David Chen',
     role: 'Fashion Influencer',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
@@ -23,7 +50,7 @@ const testimonials = [
     rating: 5,
   },
   {
-    id: 3,
+    id: 'fallback-3',
     name: 'Sarah Thompson',
     role: 'Founder, EcoVibe',
     avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
@@ -33,24 +60,71 @@ const testimonials = [
   },
 ];
 
-const StarRating = ({ rating }: { rating: number }) => {
-  return (
-    <div className="flex gap-0.5">
-      {[...Array(5)].map((_, i) => (
-        <Star
-          key={i}
-          className={`w-4 h-4 ${
-            i < rating
-              ? 'fill-yellow-400 text-yellow-400'
-              : 'text-gray-300 fill-gray-300'
-          }`}
-        />
-      ))}
-    </div>
-  );
-};
+export default function Testimonials() {
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const Testimonials = () => {
+  useEffect(() => {
+    async function fetchTestimonials() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const { data, error } = await supabase
+          .from('testimonials')
+          .select('id, name, role, avatar, review, rating')
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (error) {
+          console.error('Supabase error (Testimonials):', error);
+          setError('Failed to load testimonials.');
+          // Use fallback if DB fails
+          setTestimonials(fallbackTestimonials);
+          setLoading(false);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          // Map DB data
+          const formatted = data.map((t) => ({
+            id: t.id,
+            name: t.name || 'Anonymous',
+            role: t.role || 'User',
+            avatar: t.avatar || 'https://i.pravatar.cc/150?img=' + Math.floor(Math.random() * 70),
+            review: t.review || 'Amazing experience!',
+            rating: Number(t.rating) || 5,
+          }));
+          setTestimonials(formatted);
+        } else {
+          // No rows – use fallback
+          console.log('No testimonials found in DB, using fallback.');
+          setTestimonials(fallbackTestimonials);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        setError('An unexpected error occurred.');
+        setTestimonials(fallbackTestimonials);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTestimonials();
+  }, []);
+
+  if (loading) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50/80">
+        <div className="max-w-7xl mx-auto text-center">
+          <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Loading reviews...</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50/80">
       <div className="max-w-7xl mx-auto">
@@ -100,6 +174,4 @@ const Testimonials = () => {
       </div>
     </section>
   );
-};
-
-export default Testimonials;
+}

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Menu, X, ChevronDown, Sparkles } from 'lucide-react';
+import Image from "next/image";
+
 
 const Navbar = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -25,7 +27,7 @@ const Navbar = () => {
     const navLinks = [
         { name: 'Home', href: '/' },
         { name: 'Explore Products', href: '/products' },
-        { name: 'Find Influencers', href: '/influencers' },
+        { name: 'Find Influencers',  href: '/influencers' },
         { name: 'About', href: '/about' },
         { name: 'Contact', href: '/contact' },
     ];
@@ -33,7 +35,7 @@ const Navbar = () => {
     return (
         <nav
             className={`
-          fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out
+          sticky top-0 z-50 w-full transition-all duration-300 ease-in-out
           ${
               isScrolled
                   ? 'bg-white/80 backdrop-blur-xl shadow-lg shadow-black/5 border-b border-white/20'
@@ -41,33 +43,35 @@ const Navbar = () => {
           }
         `}
         >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16 md:h-20">
+            <div className="w-full px-6 lg:px-12">
+               <div className="flex items-center justify-between h-24">
                     {/* Logo */}
-                    <Link
-                        href="/"
-                        className="flex items-center gap-2 group"
-                        onClick={handleLinkClick}
+                   <Link
+                    href="/"
+                    className="flex items-center gap-3"
+                    onClick={handleLinkClick}
                     >
-                        <div className="relative">
-                            <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full blur-md opacity-70 group-hover:opacity-100 transition-opacity duration-300"></div>
-                            <div className="relative bg-gradient-to-br from-purple-600 to-pink-600 rounded-full p-1.5 shadow-lg shadow-purple-500/25">
-                                <Sparkles className="w-5 h-5 text-white" />
-                            </div>
-                        </div>
-                        <span
-                            className={`
-                    text-xl font-extrabold tracking-tight transition-colors duration-300
-                    ${
-                        isScrolled
-                            ? 'bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent'
-                            : 'text-white'
-                    }
-                  `}
-                        >
-                            InfluenceX
-                        </span>
-                    </Link>
+                   <Image
+                   src="/images/logo.jpeg"
+                   alt="InfluenceX Logo"
+                   width={90}
+                   height={90}
+                   className="rounded object cover"
+                  />
+
+                  <span
+                  className={`
+                  text-xl font-extrabold tracking-tight transition-colors duration-300
+                  ${
+                  isScrolled
+                  ? "bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent"
+                  : "text-white"
+                  }
+                 `}
+                  >
+    
+                  </span>
+                  </Link>
 
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center gap-1">

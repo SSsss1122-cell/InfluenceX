@@ -5,7 +5,6 @@ import Footer from "@/components/Footer";
 export default function ProductsPage() {
   return (
     <>
-      <Navbar />
       <ProductListing />
       <Footer />
     </>

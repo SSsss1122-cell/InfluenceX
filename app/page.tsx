@@ -6,11 +6,14 @@ import InfluencerGrid from '@/components/InfluencerGrid';
 import StatsSection from '@/components/StatsSection';
 import Testimonials from '@/components/Testimonials';
 import Footer from '@/components/Footer';
+import Heroo from '@/components/Heroo';
+
 
 export default function Home() {
   return (
     <main>
       <Hero />
+      <Heroo />
       <WhatIsInfluenceX />
       <FeaturedProducts />
       <MapPreview />
