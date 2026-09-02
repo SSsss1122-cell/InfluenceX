@@ -3,51 +3,115 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Star, ShoppingBag } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase'; // adjust path if needed
 
-const products = [
-  {
-    id: 1,
-    name: 'Wireless Noise-Cancelling Headphones',
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop',
-    originalPrice: 199.99,
-    discountedPrice: 149.99,
-    seller: 'AudioVibe Store',
-    rating: 4.8,
-    reviews: 342,
-  },
-  {
-    id: 2,
-    name: 'Smart Fitness Tracker Watch',
-    image: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&h=400&fit=crop',
-    originalPrice: 89.99,
-    discountedPrice: 69.99,
-    seller: 'FitTech Co.',
-    rating: 4.6,
-    reviews: 218,
-  },
-  {
-    id: 3,
-    name: 'Organic Vitamin C Serum',
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSXxbZ2828tgvNDblms_pdS4n7tiEEKv4WlOQvh4clSDg&s=10',
-    originalPrice: 45.00,
-    discountedPrice: 34.50,
-    seller: 'GlowLab Skincare',
-    rating: 4.9,
-    reviews: 507,
-  },
-  {
-    id: 4,
-    name: 'Minimalist Leather Backpack',
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop',
-    originalPrice: 120.00,
-    discountedPrice: 89.00,
-    seller: 'UrbanCraft',
-    rating: 4.7,
-    reviews: 163,
-  },
-];
+// ─── Product type ──────────────────────────────────────
+type Product = {
+  id: string;
+  name: string;
+  image: string;        // from image_url
+  price: number;        // from price
+  category: string;     // from category
+  created_at: string;
+  // additional fields we'll derive or default:
+  seller: string;
+  rating: number;
+  reviews: number;
+};
 
 const FeaturedProducts = () => {
+  // ─── State ──────────────────────────────────────────
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const DISPLAY_LIMIT = 4; // show only 4 products
+
+  // ─── Fetch from Supabase ─────────────────────────────
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, price, image_url, category, created_at')
+          .order('created_at', { ascending: false })
+          .limit(DISPLAY_LIMIT); // only fetch 4 newest products
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          setProducts([]);
+          return;
+        }
+
+        const mapped: Product[] = data.map((item) => ({
+          id: item.id,
+          name: item.name || 'Unnamed Product',
+          image: item.image_url || 'https://via.placeholder.com/400?text=No+Image',
+          price: Number(item.price) || 0,
+          category: item.category || 'Uncategorized',
+          created_at: item.created_at,
+          // default values for missing fields
+          seller: 'Store',
+          rating: 0,
+          reviews: 0,
+        }));
+
+        setProducts(mapped);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load featured products');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  // ─── Loading state ──────────────────────────────────
+  if (loading) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50/50">
+        <div className="max-w-7xl mx-auto text-center">
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+          <p className="mt-4 text-gray-600">Loading featured products...</p>
+        </div>
+      </section>
+    );
+  }
+
+  // ─── Error state ────────────────────────────────────
+  if (error) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50/50">
+        <div className="max-w-7xl mx-auto text-center">
+          <p className="text-red-500">⚠️ {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-full text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // ─── Empty state ────────────────────────────────────
+  if (products.length === 0) {
+    return (
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50/50">
+        <div className="max-w-7xl mx-auto text-center">
+          <p className="text-gray-500">No products available yet.</p>
+        </div>
+      </section>
+    );
+  }
+
+  // ─── Main UI ──────────────────────────────────────────
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50/50">
       <div className="max-w-7xl mx-auto">
@@ -79,14 +143,14 @@ const FeaturedProducts = () => {
                   fill
                   className="object-cover group-hover:scale-105 transition-transform duration-500"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                  onError={(e) => {
+                    // fallback if image fails to load
+                    (e.target as HTMLImageElement).src =
+                      'https://via.placeholder.com/400?text=No+Image';
+                  }}
                 />
-                {/* Discount badge */}
-                {product.originalPrice > product.discountedPrice && (
-                  <div className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
-                    -{Math.round((1 - product.discountedPrice / product.originalPrice) * 100)}%
-                  </div>
-                )}
-                {/* Quick add button (optional) */}
+                {/* Discount badge - hidden because we have no discount info */}
+                {/* Quick add button */}
                 <button className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-purple-50">
                   <ShoppingBag className="w-5 h-5 text-purple-600" />
                 </button>
@@ -100,8 +164,12 @@ const FeaturedProducts = () => {
                   </span>
                   <div className="flex items-center gap-1 text-sm text-yellow-500">
                     <Star className="w-4 h-4 fill-yellow-500" />
-                    <span className="font-medium text-gray-700">{product.rating}</span>
-                    <span className="text-gray-400 text-xs">({product.reviews})</span>
+                    <span className="font-medium text-gray-700">
+                      {product.rating > 0 ? product.rating.toFixed(1) : 'New'}
+                    </span>
+                    {product.reviews > 0 && (
+                      <span className="text-gray-400 text-xs">({product.reviews})</span>
+                    )}
                   </div>
                 </div>
 
@@ -111,13 +179,9 @@ const FeaturedProducts = () => {
 
                 <div className="mt-3 flex items-center gap-3">
                   <span className="text-xl font-bold text-gray-900">
-                    ${product.discountedPrice.toFixed(2)}
+                    ${product.price.toFixed(2)}
                   </span>
-                  {product.originalPrice > product.discountedPrice && (
-                    <span className="text-sm text-gray-400 line-through">
-                      ${product.originalPrice.toFixed(2)}
-                    </span>
-                  )}
+                  {/* No discount price because we only have one price */}
                 </div>
 
                 <Link
