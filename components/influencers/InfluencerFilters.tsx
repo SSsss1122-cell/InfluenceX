@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { categories, states, cities } from "@/data/influencers";
 import { SlidersHorizontal } from "lucide-react";
+import { categories, states, cities } from "@/data/influencers";
 
-interface Filters {
+// ✅ This MUST match the Filters interface in your page exactly.
+export interface Filters {
   categories: string[];
   state: string;
   city: string;
@@ -18,7 +19,7 @@ interface Filters {
   priceMax: string;
   genders: string[];
   verified: boolean;
-  availability: string;
+  availability: string; // "" | "available" | "unavailable"
 }
 
 interface InfluencerFiltersProps {
@@ -29,6 +30,25 @@ interface InfluencerFiltersProps {
   className?: string;
 }
 
+const PLATFORMS = ["instagram", "youtube", "facebook", "twitter", "linkedin"];
+const INFLUENCER_TYPES = ["Nano", "Micro", "Mid-tier", "Macro", "Mega"];
+const GENDERS = ["Male", "Female", "Other"];
+
+function FilterSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-gray-200 py-4">
+      <h4 className="font-medium text-gray-900 mb-2">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
 export default function InfluencerFilters({
   filters,
   setFilters,
@@ -37,43 +57,44 @@ export default function InfluencerFilters({
   className = "",
 }: InfluencerFiltersProps) {
   const [showAllCategories, setShowAllCategories] = useState(false);
-  const visibleCategories = showAllCategories ? categories : categories.slice(0, 10);
+  const visibleCategories = showAllCategories
+    ? categories
+    : categories.slice(0, 10);
 
-  const handleCheckboxChange = (key: keyof Filters, value: string) => {
-    const current = filters[key] as string[];
-    const newVal = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
-    setFilters({ ...filters, [key]: newVal });
+  // Multi-select toggle (categories / platforms / influencerTypes / genders)
+  const toggle = (
+    key: "categories" | "platforms" | "influencerTypes" | "genders",
+    value: string
+  ) => {
+    setFilters((prev) => {
+      const current = prev[key];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      return { ...prev, [key]: next };
+    });
   };
 
-  const handleRangeChange = (key: keyof Filters, value: string) => {
-    setFilters({ ...filters, [key]: value });
+  // Single-value setter
+  const set = <K extends keyof Filters>(key: K, value: Filters[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
   };
-
-  const handleSelectChange = (key: keyof Filters, value: string) => {
-    setFilters({ ...filters, [key]: value });
-  };
-
-  const handleBoolChange = (key: keyof Filters, value: boolean) => {
-    setFilters({ ...filters, [key]: value });
-  };
-
-  const FilterSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div className="border-b border-gray-200 py-4">
-      <h4 className="font-medium text-gray-900 mb-2">{title}</h4>
-      {children}
-    </div>
-  );
 
   return (
-    <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 ${className}`}>
+    <div
+      className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 ${className}`}
+    >
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
           <SlidersHorizontal className="w-5 h-5" />
           Filters
         </h3>
-        <button onClick={onClear} className="text-sm text-blue-600 hover:underline font-medium">
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-sm text-blue-600 hover:underline font-medium"
+        >
           Clear All
         </button>
       </div>
@@ -82,11 +103,14 @@ export default function InfluencerFilters({
       <FilterSection title="Category">
         <div className="space-y-2">
           {visibleCategories.map((cat) => (
-            <label key={cat} className="flex items-center gap-2 text-sm text-gray-700">
+            <label
+              key={cat}
+              className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={filters.categories.includes(cat)}
-                onChange={() => handleCheckboxChange("categories", cat)}
+                onChange={() => toggle("categories", cat)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               {cat}
@@ -94,7 +118,8 @@ export default function InfluencerFilters({
           ))}
           {categories.length > 10 && (
             <button
-              onClick={() => setShowAllCategories(!showAllCategories)}
+              type="button"
+              onClick={() => setShowAllCategories((s) => !s)}
               className="text-sm text-blue-600 hover:underline font-medium"
             >
               {showAllCategories ? "View Less" : "View More"}
@@ -108,22 +133,26 @@ export default function InfluencerFilters({
         <div className="space-y-2">
           <select
             value={filters.state}
-            onChange={(e) => handleSelectChange("state", e.target.value)}
+            onChange={(e) => set("state", e.target.value)}
             className="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">Select State</option>
             {states.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>
+                {s}
+              </option>
             ))}
           </select>
           <select
             value={filters.city}
-            onChange={(e) => handleSelectChange("city", e.target.value)}
+            onChange={(e) => set("city", e.target.value)}
             className="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">Select City</option>
             {cities.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
         </div>
@@ -132,12 +161,15 @@ export default function InfluencerFilters({
       {/* Platform */}
       <FilterSection title="Platform">
         <div className="space-y-2">
-          {["instagram", "youtube", "facebook", "twitter", "linkedin"].map((p) => (
-            <label key={p} className="flex items-center gap-2 text-sm text-gray-700">
+          {PLATFORMS.map((p) => (
+            <label
+              key={p}
+              className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={filters.platforms.includes(p)}
-                onChange={() => handleCheckboxChange("platforms", p)}
+                onChange={() => toggle("platforms", p)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -152,16 +184,18 @@ export default function InfluencerFilters({
           <div className="flex items-center gap-4">
             <input
               type="number"
+              min={0}
               placeholder="Min"
               value={filters.followersMin}
-              onChange={(e) => handleRangeChange("followersMin", e.target.value)}
+              onChange={(e) => set("followersMin", e.target.value)}
               className="w-1/2 rounded-lg border-gray-300 text-sm"
             />
             <input
               type="number"
+              min={0}
               placeholder="Max"
               value={filters.followersMax}
-              onChange={(e) => handleRangeChange("followersMax", e.target.value)}
+              onChange={(e) => set("followersMax", e.target.value)}
               className="w-1/2 rounded-lg border-gray-300 text-sm"
             />
           </div>
@@ -177,20 +211,24 @@ export default function InfluencerFilters({
       </FilterSection>
 
       {/* Engagement */}
-      <FilterSection title="Engagement Rate">
+      <FilterSection title="Engagement Rate (%)">
         <div className="flex items-center gap-4">
           <input
             type="number"
+            step="0.1"
+            min={0}
             placeholder="Min %"
             value={filters.engagementMin}
-            onChange={(e) => handleRangeChange("engagementMin", e.target.value)}
+            onChange={(e) => set("engagementMin", e.target.value)}
             className="w-1/2 rounded-lg border-gray-300 text-sm"
           />
           <input
             type="number"
+            step="0.1"
+            min={0}
             placeholder="Max %"
             value={filters.engagementMax}
-            onChange={(e) => handleRangeChange("engagementMax", e.target.value)}
+            onChange={(e) => set("engagementMax", e.target.value)}
             className="w-1/2 rounded-lg border-gray-300 text-sm"
           />
         </div>
@@ -199,12 +237,15 @@ export default function InfluencerFilters({
       {/* Influencer Type */}
       <FilterSection title="Influencer Type">
         <div className="space-y-2">
-          {["Nano", "Micro", "Mid-tier", "Macro", "Mega"].map((type) => (
-            <label key={type} className="flex items-center gap-2 text-sm text-gray-700">
+          {INFLUENCER_TYPES.map((type) => (
+            <label
+              key={type}
+              className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={filters.influencerTypes.includes(type)}
-                onChange={() => handleCheckboxChange("influencerTypes", type)}
+                onChange={() => toggle("influencerTypes", type)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               {type}
@@ -218,16 +259,18 @@ export default function InfluencerFilters({
         <div className="flex items-center gap-4">
           <input
             type="number"
+            min={0}
             placeholder="Min"
             value={filters.priceMin}
-            onChange={(e) => handleRangeChange("priceMin", e.target.value)}
+            onChange={(e) => set("priceMin", e.target.value)}
             className="w-1/2 rounded-lg border-gray-300 text-sm"
           />
           <input
             type="number"
+            min={0}
             placeholder="Max"
             value={filters.priceMax}
-            onChange={(e) => handleRangeChange("priceMax", e.target.value)}
+            onChange={(e) => set("priceMax", e.target.value)}
             className="w-1/2 rounded-lg border-gray-300 text-sm"
           />
         </div>
@@ -236,12 +279,15 @@ export default function InfluencerFilters({
       {/* Gender */}
       <FilterSection title="Gender">
         <div className="space-y-2">
-          {["Male", "Female", "Other"].map((g) => (
-            <label key={g} className="flex items-center gap-2 text-sm text-gray-700">
+          {GENDERS.map((g) => (
+            <label
+              key={g}
+              className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+            >
               <input
                 type="checkbox"
                 checked={filters.genders.includes(g)}
-                onChange={() => handleCheckboxChange("genders", g)}
+                onChange={() => toggle("genders", g)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               {g}
@@ -252,11 +298,11 @@ export default function InfluencerFilters({
 
       {/* Verified */}
       <FilterSection title="Verification">
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
           <input
             type="checkbox"
             checked={filters.verified}
-            onChange={(e) => handleBoolChange("verified", e.target.checked)}
+            onChange={(e) => set("verified", e.target.checked)}
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
           Verified Influencers Only
@@ -266,35 +312,35 @@ export default function InfluencerFilters({
       {/* Availability */}
       <FilterSection title="Availability">
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
               type="radio"
               name="availability"
               value="available"
               checked={filters.availability === "available"}
-              onChange={() => handleSelectChange("availability", "available")}
+              onChange={() => set("availability", "available")}
               className="text-blue-600 focus:ring-blue-500"
             />
             Available for campaigns
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
               type="radio"
               name="availability"
               value="unavailable"
               checked={filters.availability === "unavailable"}
-              onChange={() => handleSelectChange("availability", "unavailable")}
+              onChange={() => set("availability", "unavailable")}
               className="text-blue-600 focus:ring-blue-500"
             />
             Currently unavailable
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
               type="radio"
               name="availability"
               value=""
               checked={filters.availability === ""}
-              onChange={() => handleSelectChange("availability", "")}
+              onChange={() => set("availability", "")}
               className="text-blue-600 focus:ring-blue-500"
             />
             All
@@ -303,6 +349,7 @@ export default function InfluencerFilters({
       </FilterSection>
 
       <button
+        type="button"
         onClick={onApply}
         className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors"
       >

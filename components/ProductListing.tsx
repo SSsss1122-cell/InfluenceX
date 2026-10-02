@@ -30,7 +30,6 @@ export default function ProductListing() {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Fetch products from Supabase
   const fetchProducts = async () => {
     setLoading(true);
     setError(null);
@@ -69,7 +68,6 @@ export default function ProductListing() {
     fetchProducts();
   }, []);
 
-  // --- Filter products by search query ---
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products;
     const lowerQuery = searchQuery.toLowerCase().trim();
@@ -78,7 +76,6 @@ export default function ProductListing() {
     );
   }, [products, searchQuery]);
 
-  // --- Cart functions ---
   const addToCart = (productId: string) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === productId);
@@ -114,7 +111,6 @@ export default function ProductListing() {
 
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // --- Wishlist toggle ---
   const toggleWishlist = (id: string) => {
     setWishlist((prev) => {
       const newSet = new Set(prev);
@@ -124,7 +120,6 @@ export default function ProductListing() {
     });
   };
 
-  // --- Loading, Error, Empty states ---
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -172,11 +167,10 @@ export default function ProductListing() {
     );
   }
 
-  // --- Main render ---
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header with Search and Cart */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Products ({filteredProducts.length})
@@ -210,14 +204,12 @@ export default function ProductListing() {
           </div>
         </div>
 
-        {/* Toast notification */}
         {toast && (
           <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 dark:bg-gray-700 text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity">
             {toast}
           </div>
         )}
 
-        {/* No search results */}
         {filteredProducts.length === 0 && searchQuery.trim() !== "" && (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🔍</div>
@@ -228,8 +220,8 @@ export default function ProductListing() {
           </div>
         )}
 
-        {/* Product Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-fr">
+        {/* Product Grid — removed auto-rows-fr to stop forced stretching */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProducts.map((product) => {
             const isWishlisted = wishlist.has(product.id);
             const cartItem = cart.find((item) => item.id === product.id);
@@ -238,14 +230,14 @@ export default function ProductListing() {
             return (
               <div
                 key={product.id}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow flex flex-col h-full"
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow flex flex-col"
               >
-                {/* Image & Wishlist */}
-                <div className="relative aspect-square bg-gray-100 dark:bg-gray-700 flex-shrink-0">
+                {/* Image */}
+                <div className="relative w-full aspect-square bg-gray-100 dark:bg-gray-700">
                   <img
                     src={product.image}
                     alt={product.name}
-                    className="w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src =
                         "https://via.placeholder.com/400?text=No+Image";
@@ -265,7 +257,7 @@ export default function ProductListing() {
                   </button>
                 </div>
 
-                {/* Product details – this wrapper expands to fill remaining space */}
+                {/* Details */}
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-1">
                     {product.name}
@@ -277,7 +269,7 @@ export default function ProductListing() {
                     {product.category}
                   </p>
 
-                  {/* Buttons – pushed to bottom by mt-auto */}
+                  {/* Buttons pinned to bottom via mt-auto */}
                   <div className="mt-auto pt-4 flex gap-2">
                     <button
                       onClick={() => addToCart(product.id)}

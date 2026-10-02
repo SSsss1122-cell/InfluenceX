@@ -1,7 +1,7 @@
 import Hero from '@/components/Hero';
 import WhatIsInfluenceX from '@/components/WhatIsInfluenceX';
 import FeaturedProducts from '@/components/FeaturedProducts';
-import MapPreview from '@/components/MapPreview';
+import MapSection from '@/components/map/InfluencerMapSection';
 import InfluencerGrid from '@/components/InfluencerGrid';
 import StatsSection from '@/components/StatsSection';
 import Testimonials from '@/components/Testimonials';
@@ -15,8 +15,8 @@ export default function Home() {
       <Hero />
       <Heroo />
       <WhatIsInfluenceX />
+      <MapSection />
       <FeaturedProducts />
-      <MapPreview />
       <InfluencerGrid />
       <StatsSection />
       <Testimonials />

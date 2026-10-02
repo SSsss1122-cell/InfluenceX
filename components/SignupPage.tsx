@@ -3,7 +3,6 @@ import { supabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import {
   Mail,
-  Lock,
   User,
   Eye,
   EyeOff,
@@ -23,28 +22,24 @@ export default function SignupPage() {
 
   // ─── Theme ──────────────────────────────────────────
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-
   useEffect(() => {
     const stored = localStorage.getItem("influencex-theme") as "dark" | "light" | null;
     if (stored) setTheme(stored);
-    else if (window.matchMedia("(prefers-color-scheme: light)").matches) {
-      setTheme("light");
-    }
+    else if (window.matchMedia("(prefers-color-scheme: light)").matches) setTheme("light");
   }, []);
-
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("influencex-theme", theme);
   }, [theme]);
-
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   // ─── Form state ─────────────────────────────────────
- const [fullName, setFullName] = useState("");
+  const [mode, setMode] = useState<"signup" | "login">("signup");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"user" | "influencer" | "brand">("user");
+  const [selectedRole, setSelectedRole] = useState<Role>("user");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState({
@@ -54,12 +49,10 @@ export default function SignupPage() {
     confirm: false,
   });
 
-  // ─── UI state ──────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  // ─── Password strength ─────────────────────────────
   const getStrength = () => {
     if (password.length === 0) return 0;
     if (password.length < 6) return 1;
@@ -68,62 +61,95 @@ export default function SignupPage() {
   };
   const strength = getStrength();
 
-  // ─── Validation ────────────────────────────────────
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // ─── Submit with Supabase ──────────────────────────
+  // ─── Submit ─────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError(null);
     setSuccess(false);
 
     const err = {
-      name: fullName.trim().length < 2,
+      name: mode === "signup" && fullName.trim().length < 2,
       email: !validateEmail(email),
       password: password.length < 6,
-      confirm: password !== confirm || !confirm,
+      confirm: mode === "signup" && (password !== confirm || !confirm),
     };
     setErrors(err);
-
-    if (err.name || err.email || err.password || err.confirm) {
-      return;
-    }
+    if (err.name || err.email || err.password || err.confirm) return;
 
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: selectedRole,
+      if (mode === "signup") {
+        // 1️⃣ Create the auth user in Supabase (auth.users)
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: selectedRole,
+            },
           },
-        },
-      });
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setSuccess(true);
-      setLoading(false);
+        // 2️⃣ Also insert into your own `profiles` table (optional)
+        //    Wrapped in try/catch so a missing table or RLS policy
+        //    won't break the whole signup flow.
+        if (data.user) {
+          try {
+            await supabase.from("profiles").insert({
+              id: data.user.id,
+              full_name: fullName,
+              email: email,
+              role: selectedRole,
+            });
+          } catch (tableErr) {
+            console.warn("Could not insert into profiles table:", tableErr);
+            // Don't throw — the auth signup already succeeded
+          }
+        }
 
-      // Redirect to home page after a short delay
-      setTimeout(() => {
-        router.push("/"); // 👈 Redirect to home
-      }, 2000);
+        // 3️⃣ If email confirmation is OFF, a session exists right now
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          setSuccess(true);
+          setTimeout(() => router.push("/"), 800);
+        } else {
+          // Email confirmation is ON — user must confirm first
+          setGeneralError(
+            "Account created! Check your inbox to confirm, then click Sign In."
+          );
+          setMode("login");
+          setLoading(false);
+        }
+      } else {
+        // ─── Login ──────────────────────────────────
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        setSuccess(true);
+        setTimeout(() => router.push("/"), 500);
+      }
     } catch (error: any) {
-      setGeneralError(error.message || "Something went wrong. Please try again.");
+      // Full error visible in DevTools → Console
+      console.error("SIGNUP/LOGIN ERROR:", error);
+      setGeneralError(
+        error?.message || "Something went wrong. Please try again."
+      );
       setLoading(false);
     }
   };
 
-  // ─── Social demo ────────────────────────────────────
-  const socialSignup = (provider: string) => {
+  const socialSignup = (provider: string) =>
     alert(`Continue with ${provider} (Demo — no backend)`);
-  };
 
-  // ─── Theme icon ────────────────────────────────────
   const ThemeIcon = () =>
     theme === "dark" ? (
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -138,20 +164,17 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-gradient-to-br from-indigo-50 via-purple-50 to-slate-100 dark:from-[#0b0d15] dark:via-[#1a1d2e] dark:to-[#0b0d15] relative overflow-hidden">
-      {/* Background Orbs */}
       <div className="absolute w-[500px] h-[500px] bg-indigo-300/30 dark:bg-indigo-500/20 rounded-full blur-[120px] -top-40 -left-40 animate-pulse" />
       <div className="absolute w-[400px] h-[400px] bg-purple-300/30 dark:bg-purple-500/20 rounded-full blur-[120px] -bottom-40 -right-40 animate-pulse delay-1000" />
 
-      {/* Theme Toggle */}
       <button
         onClick={toggleTheme}
         className="absolute top-6 right-6 z-50 w-11 h-11 rounded-full bg-white/70 dark:bg-white/10 backdrop-blur border border-white/30 dark:border-white/10 shadow-md flex items-center justify-center text-gray-700 dark:text-white hover:scale-105 transition-transform"
-        aria-label="Toggle theme"
       >
         <ThemeIcon />
       </button>
 
-      {/* LEFT SIDE: Brand / Hero */}
+      {/* LEFT */}
       <div className="w-full md:w-1/2 flex flex-col justify-center items-start p-8 md:p-16 lg:p-20 relative z-10">
         <div className="max-w-md">
           <div className="flex items-center gap-3 mb-4">
@@ -195,45 +218,42 @@ export default function SignupPage() {
               <span>Discover influencers & brands near you</span>
             </div>
           </div>
-
-          <div className="mt-10 flex items-center gap-4 text-sm text-gray-500 dark:text-white/40">
-            <span>Already a member?</span>
-            <a href="#" className="font-semibold text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
-              Sign in <ArrowRight className="w-4 h-4" />
-            </a>
-          </div>
         </div>
       </div>
 
-      {/* RIGHT SIDE: Signup Form */}
+      {/* RIGHT */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-6 md:p-12 relative z-10">
-        <div className="w-full max-w-md bg-white/70 dark:bg-white/6 backdrop-blur-2xl border border-white/30 dark:border-white/8 rounded-3xl shadow-2xl dark:shadow-[0_25px_60px_rgba(0,0,0,0.6)] p-8 sm:p-10 transition-all duration-300">
+        <div className="w-full max-w-md bg-white/70 dark:bg-white/6 backdrop-blur-2xl border border-white/30 dark:border-white/8 rounded-3xl shadow-2xl dark:shadow-[0_25px_60px_rgba(0,0,0,0.6)] p-8 sm:p-10">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create your account</h2>
-            <p className="text-sm text-gray-500 dark:text-white/50 mt-1">Start your journey with InfluenceX</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {mode === "signup" ? "Create your account" : "Welcome back"}
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-white/50 mt-1">
+              {mode === "signup" ? "Start your journey with InfluenceX" : "Sign in to continue"}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Full Name */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1">Full Name</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Full Name"
-                  className={`w-full rounded-2xl border-2 bg-white/50 dark:bg-white/5 backdrop-blur px-4 py-2.5 pr-10 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-white/40 outline-none transition-all ${
-                    errors.name
-                      ? "border-red-400 shadow-[0_0_0_4px_rgba(248,113,113,0.15)]"
-                      : "border-white/20 dark:border-white/10 focus:border-indigo-400/60 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.2)]"
-                  }`}
-                />
-                <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-white/40" />
+            {mode === "signup" && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1">Full Name</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Full Name"
+                    className={`w-full rounded-2xl border-2 bg-white/50 dark:bg-white/5 backdrop-blur px-4 py-2.5 pr-10 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-white/40 outline-none transition-all ${
+                      errors.name
+                        ? "border-red-400 shadow-[0_0_0_4px_rgba(248,113,113,0.15)]"
+                        : "border-white/20 dark:border-white/10 focus:border-indigo-400/60 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.2)]"
+                    }`}
+                  />
+                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-white/40" />
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Email */}
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1">Email</label>
               <div className="relative">
@@ -252,7 +272,6 @@ export default function SignupPage() {
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1">Password</label>
               <div className="relative">
@@ -274,8 +293,7 @@ export default function SignupPage() {
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-                {/* Password strength bar */}
-                {password.length > 0 && (
+                {password.length > 0 && mode === "signup" && (
                   <div className="absolute right-12 top-1/2 -translate-y-1/2 flex gap-0.5">
                     {[1, 2, 3].map((i) => (
                       <div
@@ -296,58 +314,59 @@ export default function SignupPage() {
               </div>
             </div>
 
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1">Confirm Password</label>
-              <div className="relative">
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="••••••••"
-                  className={`w-full rounded-2xl border-2 bg-white/50 dark:bg-white/5 backdrop-blur px-4 py-2.5 pr-10 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-white/40 outline-none transition-all ${
-                    errors.confirm
-                      ? "border-red-400 shadow-[0_0_0_4px_rgba(248,113,113,0.15)]"
-                      : "border-white/20 dark:border-white/10 focus:border-indigo-400/60 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.2)]"
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/70"
-                >
-                  {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+            {mode === "signup" && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1">Confirm Password</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirm ? "text" : "password"}
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                      placeholder="••••••••"
+                      className={`w-full rounded-2xl border-2 bg-white/50 dark:bg-white/5 backdrop-blur px-4 py-2.5 pr-10 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-white/40 outline-none transition-all ${
+                        errors.confirm
+                          ? "border-red-400 shadow-[0_0_0_4px_rgba(248,113,113,0.15)]"
+                          : "border-white/20 dark:border-white/10 focus:border-indigo-400/60 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.2)]"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/70"
+                    >
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
 
-            {/* Role Selection */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1.5">I am a</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["user", "influencer", "brand"] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setSelectedRole(r)}
-                    className={`py-2 rounded-2xl border-2 text-sm font-medium transition-all ${
-                      selectedRole === r
-                        ? "border-indigo-500 bg-indigo-500/10 text-gray-900 dark:text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
-                        : "border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/5 text-gray-500 dark:text-white/60 hover:border-indigo-400/40"
-                    }`}
-                  >
-                    <span className="block text-base">
-                      {r === "user" && "👤"}
-                      {r === "influencer" && "⭐"}
-                      {r === "brand" && "🏢"}
-                    </span>
-                    <span className="capitalize">{r}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-white/70 mb-1.5">I am a</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["user", "influencer", "brand"] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setSelectedRole(r)}
+                        className={`py-2 rounded-2xl border-2 text-sm font-medium transition-all ${
+                          selectedRole === r
+                            ? "border-indigo-500 bg-indigo-500/10 text-gray-900 dark:text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+                            : "border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/5 text-gray-500 dark:text-white/60 hover:border-indigo-400/40"
+                        }`}
+                      >
+                        <span className="block text-base">
+                          {r === "user" && "👤"}
+                          {r === "influencer" && "⭐"}
+                          {r === "brand" && "🏢"}
+                        </span>
+                        <span className="capitalize">{r}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
-            {/* General error message */}
             {generalError && (
               <div className="flex items-start gap-2 text-sm text-red-500 bg-red-50 dark:bg-red-500/10 p-3 rounded-2xl border border-red-200 dark:border-red-500/20">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -355,53 +374,60 @@ export default function SignupPage() {
               </div>
             )}
 
-            {/* Success message */}
             {success && (
               <div className="flex items-start gap-2 text-sm text-green-600 bg-green-50 dark:bg-green-500/10 p-3 rounded-2xl border border-green-200 dark:border-green-500/20">
                 <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>Account created! Redirecting to home…</span>
+                <span>Success! Redirecting to home…</span>
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading || success}
               className="w-full rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2.5 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all hover:-translate-y-0.5 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? "Creating account…" : "Create Account"}
+              {loading
+                ? mode === "signup"
+                  ? "Creating account…"
+                  : "Signing in…"
+                : mode === "signup"
+                ? "Create Account"
+                : "Sign In"}
               {!loading && <ArrowRight className="w-4 h-4" />}
             </button>
 
-            {/* Social */}
-            <div className="flex items-center gap-4 text-xs font-medium text-gray-400 dark:text-white/30 uppercase">
-              <span className="flex-1 h-px bg-gray-200/30 dark:bg-white/8" />
-              or continue with
-              <span className="flex-1 h-px bg-gray-200/30 dark:bg-white/8" />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => socialSignup("Google")}
-                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 py-2.5 text-sm font-medium text-gray-700 dark:text-white transition-all"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.027 16.08 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/></svg>
-                Google
-              </button>
-              <button
-                type="button"
-                onClick={() => socialSignup("GitHub")}
-                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/5 hover:bg-white/50 dark:hover:bg-white/10 py-2.5 text-sm font-medium text-gray-700 dark:text-white transition-all"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.468-2.38 1.235-3.22-.123-.3-.535-1.52.117-3.16 0 0 1.008-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.29-1.552 3.297-1.23 3.297-1.23.653 1.64.24 2.86.118 3.16.768.84 1.233 1.91 1.233 3.22 0 4.61-2.804 5.62-5.476 5.92.43.37.824 1.102.824 2.22 0 1.602-.015 2.894-.015 3.287 0 .322.216.694.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-                GitHub
-              </button>
-            </div>
-
             <p className="text-center text-sm text-gray-500 dark:text-white/50 mt-2">
-              By signing up, you agree to our{" "}
-              <a href="#" className="text-indigo-400 hover:text-indigo-300 transition-colors">Terms</a> and{" "}
-              <a href="#" className="text-indigo-400 hover:text-indigo-300 transition-colors">Privacy Policy</a>.
+              {mode === "signup" ? (
+                <>
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("login");
+                      setGeneralError(null);
+                      setSuccess(false);
+                    }}
+                    className="font-semibold text-indigo-500 hover:text-indigo-400 transition-colors"
+                  >
+                    Sign in
+                  </button>
+                </>
+              ) : (
+                <>
+                  Don't have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("signup");
+                      setGeneralError(null);
+                      setSuccess(false);
+                    }}
+                    className="font-semibold text-indigo-500 hover:text-indigo-400 transition-colors"
+                  >
+                    Sign up
+                  </button>
+                </>
+              )}
             </p>
           </form>
         </div>
