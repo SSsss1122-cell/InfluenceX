@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import InstagramPosts from '@/components/InstagramPosts';
-import { FaInstagram } from 'react-icons/fa';
+import { FaInstagram, FaYoutube } from 'react-icons/fa';
 
 interface PageProps {
   params: Promise<{
@@ -34,7 +34,6 @@ export default async function InfluencerProfilePage({
 
       {/* Cover Section */}
       <section className="relative">
-
         <div className="h-72 w-full overflow-hidden bg-gray-200">
           {influencer.cover_image && (
             <Image
@@ -61,7 +60,6 @@ export default async function InfluencerProfilePage({
             )}
           </div>
         </div>
-
       </section>
 
       {/* Profile Information */}
@@ -79,18 +77,40 @@ export default async function InfluencerProfilePage({
           )}
         </div>
 
-        <div className="mt-3 flex items-center justify-center gap-2">
-        <FaInstagram className="text-2xl text-pink-500" />
+        {/* ── Social Links: Instagram + YouTube ── */}
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-6">
 
-        <a
-        href={`https://www.instagram.com/${String(influencer.username).replace(/^@/, '')}/`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-gray-500 transition hover:text-pink-500 hover:underline"
-      >
-       {influencer.username}
-      </a>
-      </div>
+          {/* Instagram */}
+          {influencer.instagram_url && (
+            <div className="flex items-center gap-2">
+              <FaInstagram className="text-2xl text-pink-500" />
+              <a
+                href={influencer.instagram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-500 transition hover:text-pink-500 hover:underline"
+              >
+                {influencer.username}
+              </a>
+            </div>
+          )}
+
+          {/* YouTube */}
+          {influencer.youtube_url && (
+            <div className="flex items-center gap-2">
+              <FaYoutube className="text-2xl text-red-600" />
+              <a
+                href={influencer.youtube_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-500 transition hover:text-red-600 hover:underline"
+              >
+                YouTube Channel
+              </a>
+            </div>
+          )}
+
+        </div>
 
         <p className="mt-4 text-gray-600">
           {influencer.bio}
@@ -102,123 +122,120 @@ export default async function InfluencerProfilePage({
 
         {/* Stats */}
         <div className="mx-auto mt-8 grid max-w-3xl grid-cols-2 gap-4 md:grid-cols-4">
-
           <div className="rounded-xl bg-gray-50 p-5">
             <p className="text-2xl font-bold">
               {influencer.followers?.toLocaleString()}
             </p>
-            <p className="text-sm text-gray-500">
-              Followers
-            </p>
+            <p className="text-sm text-gray-500">Followers</p>
           </div>
 
           <div className="rounded-xl bg-gray-50 p-5">
             <p className="text-2xl font-bold">
               {influencer.engagement_rate}%
             </p>
-            <p className="text-sm text-gray-500">
-              Engagement
-            </p>
+            <p className="text-sm text-gray-500">Engagement</p>
           </div>
 
           <div className="rounded-xl bg-gray-50 p-5">
-            <p className="text-2xl font-bold">
-              ⭐ {influencer.rating}
-            </p>
-            <p className="text-sm text-gray-500">
-              Rating
-            </p>
+            <p className="text-2xl font-bold">⭐ {influencer.rating}</p>
+            <p className="text-sm text-gray-500">Rating</p>
           </div>
 
           <div className="rounded-xl bg-gray-50 p-5">
             <p className="text-2xl font-bold">
               ₹{influencer.starting_price}
             </p>
-            <p className="text-sm text-gray-500">
-              Starting Price
-            </p>
+            <p className="text-sm text-gray-500">Starting Price</p>
           </div>
-
         </div>
 
         {/* Categories */}
         <div className="mt-8 flex flex-wrap justify-center gap-2">
-          {influencer.categories?.map(
-            (category: string) => (
-              <span
-                key={category}
-                className="rounded-full bg-gray-100 px-4 py-2 text-sm"
-              >
-                {category}
-              </span>
-            )
-          )}
+          {influencer.categories?.map((category: string) => (
+            <span
+              key={category}
+              className="rounded-full bg-gray-100 px-4 py-2 text-sm"
+            >
+              {category}
+            </span>
+          ))}
         </div>
 
         {/* Collaboration */}
         <div className="mx-auto mt-10 max-w-2xl rounded-2xl border p-6 text-left">
-
-          <h2 className="text-xl font-semibold">
-            Collaboration Details
-          </h2>
+          <h2 className="text-xl font-semibold">Collaboration Details</h2>
 
           <div className="mt-4 grid grid-cols-2 gap-4">
-
             <div>
-              <p className="text-sm text-gray-500">
-                Influencer Type
-              </p>
-              <p className="font-medium">
-                {influencer.influencer_type}
-              </p>
+              <p className="text-sm text-gray-500">Influencer Type</p>
+              <p className="font-medium">{influencer.influencer_type}</p>
             </div>
 
             <div>
-              <p className="text-sm text-gray-500">
-                Availability
-              </p>
+              <p className="text-sm text-gray-500">Availability</p>
               <p className="font-medium">
                 {influencer.available ? 'Available' : 'Unavailable'}
               </p>
             </div>
 
             <div>
-              <p className="text-sm text-gray-500">
-                Category
-              </p>
-              <p className="font-medium">
-                {influencer.category}
-              </p>
+              <p className="text-sm text-gray-500">Category</p>
+              <p className="font-medium">{influencer.category}</p>
             </div>
 
             <div>
-              <p className="text-sm text-gray-500">
-                Starting Price
-              </p>
-              <p className="font-medium">
-                ₹{influencer.starting_price}
-              </p>
+              <p className="text-sm text-gray-500">Starting Price</p>
+              <p className="font-medium">₹{influencer.starting_price}</p>
             </div>
-
           </div>
 
           <button className="mt-6 w-full rounded-xl bg-black px-6 py-3 font-medium text-white">
             Contact Influencer
           </button>
-
         </div>
 
-        {/* Instagram */}
-        <InstagramPosts />
+        {/* ── Social Content Section: Instagram + YouTube side by side ── */}
+        <section className="mt-16 grid grid-cols-1 gap-6 text-left lg:grid-cols-2">
+
+          {/* Instagram Feed */}
+          <div>
+            <InstagramPosts />
+          </div>
+
+          {/* YouTube Card */}
+          {influencer.youtube_url && (
+            <div className="flex flex-col rounded-2xl border bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <FaYoutube className="text-3xl text-red-600" />
+                <h2 className="text-xl font-bold text-gray-900">
+                  YouTube Channel
+                </h2>
+              </div>
+
+              <p className="mb-6 text-gray-500">
+                Watch {influencer.name}&apos;s latest videos on YouTube.
+              </p>
+
+              <a
+                href={influencer.youtube_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-auto inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-3 font-medium text-white transition hover:bg-red-700"
+              >
+                <FaYoutube className="text-xl" />
+                Visit YouTube Channel
+              </a>
+            </div>
+          )}
+
+        </section>
 
         {/* Products */}
         <section className="mt-16 text-left">
-
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Products from {influencer.name}
             </h2>
-
             <p className="mt-1 text-gray-500">
               PR products assigned to this influencer
             </p>
@@ -226,20 +243,15 @@ export default async function InfluencerProfilePage({
 
           {influencer.products?.length === 0 ? (
             <div className="rounded-xl bg-gray-50 p-10 text-center">
-              <p className="text-gray-500">
-                No products assigned yet.
-              </p>
+              <p className="text-gray-500">No products assigned yet.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-
               {influencer.products?.map((product: any) => (
-
                 <div
                   key={product.id}
                   className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
                 >
-
                   <div className="h-56 overflow-hidden bg-gray-100">
                     {product.image_url && (
                       <Image
@@ -253,11 +265,9 @@ export default async function InfluencerProfilePage({
                   </div>
 
                   <div className="p-5">
-
                     <h3 className="font-semibold text-gray-900">
                       {product.name}
                     </h3>
-
                     <p className="mt-2 text-lg font-bold">
                       ₹{product.price}
                     </p>
@@ -268,20 +278,14 @@ export default async function InfluencerProfilePage({
                     >
                       View Product
                     </Link>
-
                   </div>
-
                 </div>
-
               ))}
-
             </div>
           )}
-
         </section>
 
       </section>
-
     </main>
   );
 }

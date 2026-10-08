@@ -26,11 +26,6 @@ import {
 import Footer from "@/components/Footer";
 
 // ⚠️ IMPORTANT: Change this import to match your project's Supabase client location
-// Common locations:
-//   "@/lib/supabase/client"
-//   "@/utils/supabase/client"
-//   "@/lib/supabase"
-//   "@/lib/supabaseClient"
 import { supabase } from "@/lib/supabase";
 
 // ⚠️ Replace with your actual influence email
@@ -109,7 +104,6 @@ const audiences = [
 ];
 
 // ---------------- Team placeholders ----------------
-// ⚠️ Replace the name & role values with real team member info
 const teamMembers = [
   { name: "Your Name", role: "Project Lead" },
   { name: "Team Member Name", role: "Developer" },
@@ -150,6 +144,8 @@ export default function ContactPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Influencers fetched from Supabase
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
@@ -163,7 +159,6 @@ export default function ContactPage() {
   useEffect(() => {
     const fetchInfluencers = async () => {
       try {
-        // ⚠️ Change table name and column names to match your Supabase schema
         const { data, error } = await supabase
           .from("influencers")
           .select("id, username, name, category, location")
@@ -214,24 +209,53 @@ export default function ContactPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // -------- Submit handler (frontend only) --------
-  const handleSubmit = (e: FormEvent) => {
+  // -------- Submit handler (calls /api/contact) --------
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
     if (!validate()) return;
 
-    // Frontend-only success — no backend/email service is connected yet.
-    // ⚠️ Later, replace this block with a real API call (Supabase / email service).
-    console.log("Contact form submission:", formData);
+    // Find a readable label for the selected influencer (optional)
+    const selected = influencers.find(
+      (inf) => String(inf.id) === formData.relatedInfluencer
+    );
+    const relatedInfluencerLabel = selected
+      ? selected.username || selected.name || `Influencer #${selected.id}`
+      : "";
 
-    setSubmitted(true);
-    setFormData({
-      fullName: "",
-      email: "",
-      userType: "",
-      relatedInfluencer: "",
-      subject: "",
-      message: "",
-    });
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          relatedInfluencerLabel,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to send message.");
+      }
+
+      setSubmitted(true);
+      setFormData({
+        fullName: "",
+        email: "",
+        userType: "",
+        relatedInfluencer: "",
+        subject: "",
+        message: "",
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Something went wrong.";
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // -------- Handle change --------
@@ -249,7 +273,6 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
-
       <main className="overflow-x-hidden">
         {/* ==================== SECTION 1: HERO ==================== */}
         <section className="relative">
@@ -461,6 +484,13 @@ export default function ContactPage() {
                     </div>
                   ) : (
                     <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
+                      {submitError && (
+                        <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-red-800">{submitError}</p>
+                        </div>
+                      )}
+
                       {/* Full Name */}
                       <div>
                         <label
@@ -585,10 +615,7 @@ export default function ContactPage() {
                                 inf.username ||
                                 inf.name ||
                                 `Influencer #${inf.id}`;
-                              const extras = [
-                                inf.category,
-                                inf.location,
-                              ]
+                              const extras = [inf.category, inf.location]
                                 .filter(Boolean)
                                 .join(" · ");
                               return (
@@ -670,10 +697,20 @@ export default function ContactPage() {
                       {/* Submit */}
                       <button
                         type="submit"
-                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300"
+                        disabled={submitting}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-md"
                       >
-                        Send Message
-                        <Send className="w-4 h-4" />
+                        {submitting ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            Send Message
+                            <Send className="w-4 h-4" />
+                          </>
+                        )}
                       </button>
                     </form>
                   )}
@@ -745,9 +782,7 @@ export default function ContactPage() {
 
                   <div className="mt-6 p-4 rounded-2xl bg-white/70 border border-pink-100">
                     <p className="text-xs text-gray-600 leading-relaxed">
-                      <strong className="text-gray-900">
-                        Please note:
-                      </strong>{" "}
+                      <strong className="text-gray-900">Please note:</strong>{" "}
                       This page is for contacting the{" "}
                       <strong>InfluenceX team</strong>. It is not intended to
                       share private contact details of influencers. For
@@ -816,7 +851,6 @@ export default function ContactPage() {
             </div>
 
             <div className="mt-12 grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-              {/* ⚠️ Edit teamMembers array at the top of the file to change names/roles */}
               {teamMembers.map((member, i) => (
                 <div
                   key={i}
