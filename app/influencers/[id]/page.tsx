@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import InstagramPosts from '@/components/InstagramPosts';
 import { FaInstagram, FaYoutube } from 'react-icons/fa';
 
 interface PageProps {
@@ -197,10 +196,31 @@ export default async function InfluencerProfilePage({
         {/* ── Social Content Section: Instagram + YouTube side by side ── */}
         <section className="mt-16 grid grid-cols-1 gap-6 text-left lg:grid-cols-2">
 
-          {/* Instagram Feed */}
-          <div>
-            <InstagramPosts />
-          </div>
+          {/* Instagram Card */}
+          {influencer.instagram_url && (
+            <div className="flex flex-col rounded-2xl border bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <FaInstagram className="text-3xl text-pink-500" />
+                <h2 className="text-xl font-bold text-gray-900">
+                  Instagram Profile
+                </h2>
+              </div>
+
+              <p className="mb-6 text-gray-500">
+                Check out {influencer.name}&apos;s latest posts on Instagram.
+              </p>
+
+              <a
+                href={influencer.instagram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 px-6 py-3 font-medium text-white transition hover:opacity-90"
+              >
+                <FaInstagram className="text-xl" />
+                View on Instagram
+              </a>
+            </div>
+          )}
 
           {/* YouTube Card */}
           {influencer.youtube_url && (

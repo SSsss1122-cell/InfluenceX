@@ -14,10 +14,10 @@ export default function Home() {
     <main>
       <Hero />
       <Heroo />
-      <WhatIsInfluenceX />
+      <InfluencerGrid />
       <MapSection />
       <FeaturedProducts />
-      <InfluencerGrid />
+      <WhatIsInfluenceX />
       <StatsSection />
       <Testimonials />
       <Footer />
