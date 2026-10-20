@@ -1,4 +1,3 @@
-
 "use client";
 
 import { supabase } from "@/lib/supabase";
@@ -26,7 +25,7 @@ const VALID_ROLES: Role[] = ["user", "influencer", "brand"];
 function getDashboardPath(role: Role): string {
   switch (role) {
     case "influencer":
-      return "/influencer/dashboard";
+      return "/influencer/dashboard"; // Or whatever page they fill details on
 
     case "brand":
       return "/brand-dashboard";
@@ -142,9 +141,6 @@ export default function SignupPage() {
       );
     }
 
-    // Influencer -> /influencer/dashboard
-    // Brand      -> /brand-dashboard
-    // User       -> /
     redirectByRole(resolvedRole);
   }
 
@@ -205,6 +201,7 @@ export default function SignupPage() {
 
     // If signup immediately creates a session, save the profile.
     if (data.session) {
+      // 1. Save to general profiles table (for all users)
       const { error: profileError } = await supabase
         .from("profiles")
         .upsert(
@@ -228,6 +225,34 @@ export default function SignupPage() {
         );
 
         return;
+      }
+
+      // 2. NEW: If they signed up as an Influencer, create their initial row in the influencers table
+      if (selectedRole === "influencer") {
+        // Generate a temporary unique username (they can change it later in their dashboard)
+        const baseUsername = cleanEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, "");
+        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+        const tempUsername = `${baseUsername}${randomSuffix}`;
+
+        const { error: influencerError } = await supabase
+          .from("influencers")
+          .insert({
+            user_id: data.user.id,
+            name: name,
+            username: tempUsername,
+            bio: "New creator on InfluenceX",
+            location: "Not specified",
+            state: "Not specified",
+            city: "Not specified",
+            category: "General",
+            available: false, // Set to false until they complete their profile
+          });
+
+        if (influencerError) {
+          console.error("Influencer row creation failed:", influencerError.message);
+          setMessage("Account created, but creator profile setup failed. Please contact support.");
+          // We can still redirect them so they aren't stuck
+        }
       }
 
       setMessage("Account created successfully. Redirecting...");
@@ -536,7 +561,6 @@ export default function SignupPage() {
               {mode === "signup"
                 ? "Already have an account?"
                 : "Don't have an account?"}{" "}
-
               <button
                 type="button"
                 onClick={() =>
