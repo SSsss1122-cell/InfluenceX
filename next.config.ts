@@ -5,15 +5,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "m.media-amazon.com",
+        hostname: "**", // This wildcard allows any HTTPS domain
       },
       {
-        protocol: "https",
-        hostname: "encrypted-tbn0.gstatic.com",
-      },
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
+        protocol: "http",
+        hostname: "**", // This allows any HTTP domain (just in case)
       },
     ],
   },
