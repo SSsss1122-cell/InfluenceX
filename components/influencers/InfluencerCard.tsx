@@ -70,13 +70,15 @@ export default function InfluencerCard({ influencer }: InfluencerCardProps) {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow duration-300 h-full flex flex-col">
         {/* Card Top: Image + overlay */}
         <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-          <Image
-            src={influencer.profileImage}
-            alt={influencer.name}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
+          {influencer.profileImage ? (
+            <Image
+              src={influencer.profileImage}
+              alt={influencer.name}
+              fill
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            />
+          ) : null}
           {influencer.verified && (
             <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs font-medium text-blue-600">
               <CheckCircle className="w-4 h-4 fill-blue-600 text-white" />

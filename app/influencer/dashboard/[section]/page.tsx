@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -147,9 +146,7 @@ const tableCandidates: Record<string, string[]> = {
 
 function displayNumber(value: unknown): string {
   const number = Number(value ?? 0);
-
   if (!Number.isFinite(number)) return "0";
-
   return new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: 2,
   }).format(number);
@@ -157,9 +154,7 @@ function displayNumber(value: unknown): string {
 
 function displayCurrency(value: unknown): string {
   const number = Number(value ?? 0);
-
   if (!Number.isFinite(number)) return "₹0";
-
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -167,37 +162,24 @@ function displayCurrency(value: unknown): string {
   }).format(number);
 }
 
-function getText(
-  row: DataRow,
-  keys: string[],
-  fallback = ""
-): string {
+function getText(row: DataRow, keys: string[], fallback = ""): string {
   for (const key of keys) {
     const value = row[key];
-
-    if (
-      value !== null &&
-      value !== undefined &&
-      String(value).trim() !== ""
-    ) {
+    if (value !== null && value !== undefined && String(value).trim() !== "") {
       return String(value);
     }
   }
-
   return fallback;
 }
 
 function getNumber(row: DataRow, keys: string[]): number {
   for (const key of keys) {
     const value = row[key];
-
     if (value !== null && value !== undefined && value !== "") {
       const number = Number(value);
-
       if (Number.isFinite(number)) return number;
     }
   }
-
   return 0;
 }
 
@@ -229,14 +211,7 @@ function getTitle(row: DataRow): string {
 function getDescription(row: DataRow): string {
   return getText(
     row,
-    [
-      "description",
-      "message",
-      "bio",
-      "notes",
-      "content_url",
-      "post_url",
-    ],
+    ["description", "message", "bio", "notes", "content_url", "post_url"],
     "Details have not been provided."
   );
 }
@@ -246,14 +221,28 @@ function isStatus(row: DataRow, value: string): boolean {
 }
 
 function getLocation(profile: InfluencerProfile): string {
-  return [
-    profile.city,
-    profile.state,
-  ]
-    .filter(Boolean)
-    .join(", ") ||
+  return (
+    [profile.city, profile.state].filter(Boolean).join(", ") ||
     profile.location ||
-    "Location not added";
+    "Location not added"
+  );
+}
+
+// Returns a user-friendly message for auth/network errors so the
+// dashboard never shows raw technical errors to the user.
+function describeAuthError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+
+  if (/failed to fetch|fetch failed|networkerror|load failed/i.test(message)) {
+    return "Could not reach the authentication service. Check your internet connection and try again.";
+  }
+  if (/invalid api key|invalid url|apikey|jwt/i.test(message)) {
+    return "Authentication is not configured correctly. Please verify your environment variables.";
+  }
+  if (/refresh token|session/i.test(message)) {
+    return "Your session could not be refreshed. Please sign in again.";
+  }
+  return message || "Something went wrong while loading your dashboard.";
 }
 
 export default function InfluencerSectionPage() {
@@ -271,7 +260,7 @@ export default function InfluencerSectionPage() {
   const loadPageData = useCallback(async () => {
     setLoading(true);
     setError("");
-    setRecordsNotice("");
+    setRecordsNotice(""); // Hide technical database notices
     setRecords([]);
     setProfile(null);
 
@@ -281,14 +270,17 @@ export default function InfluencerSectionPage() {
         error: authError,
       } = await supabase.auth.getUser();
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error("Auth error:", authError);
+        setError(describeAuthError(authError));
+        return;
+      }
 
       if (!user) {
         setError("Please sign in to view your influencer dashboard.");
         return;
       }
 
-      // Load only the profile linked to the currently signed-in account.
       const { data: profileData, error: profileError } = await supabase
         .from("influencers")
         .select(
@@ -297,11 +289,15 @@ export default function InfluencerSectionPage() {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error("Profile error:", profileError);
+        setError(describeAuthError(profileError));
+        return;
+      }
 
       if (!profileData) {
         setError(
-          "No influencer profile is linked to this login. Please check the user_id in your influencers table."
+          "No influencer profile is linked to this login. Please complete your profile setup."
         );
         return;
       }
@@ -309,29 +305,21 @@ export default function InfluencerSectionPage() {
       const currentProfile = profileData as InfluencerProfile;
       setProfile(currentProfile);
 
-      // These features use separate tables. Missing tables/columns
-      // are handled without preventing the profile from displaying.
       if (section === "analytics") {
         setRecords([]);
         return;
       }
 
       const candidates = tableCandidates[section] ?? [];
-
       if (candidates.length === 0) return;
 
       setRecordsLoading(true);
 
       let foundRecords: DataRow[] | null = null;
-      let lastError = "";
 
       for (const tableName of candidates) {
-        // Try the common ownership columns. Your table must have
-        // one of these columns for this query to return user records.
         for (const ownerColumn of ["influencer_id", "user_id"]) {
-          const { data, error: tableError } = await (
-            supabase as any
-          )
+          const { data, error: tableError } = await (supabase as any)
             .from(tableName)
             .select("*")
             .eq(
@@ -343,38 +331,21 @@ export default function InfluencerSectionPage() {
             foundRecords = (data ?? []) as DataRow[];
             break;
           }
-
-          lastError = `${tableName}: ${tableError.message}`;
         }
-
         if (foundRecords !== null) break;
       }
 
+      // If tables don't exist or fail to load, we just show the empty state
+      // instead of throwing raw database errors onto the screen.
       if (foundRecords !== null) {
         setRecords(foundRecords);
-
-        if (
-          foundRecords.length === 0 &&
-          lastError
-        ) {
-          setRecordsNotice(
-            "No matching records were found. Check that the selected table contains records linked to your influencer ID or login user ID."
-          );
-        }
       } else {
-        setRecordsNotice(
-          "The profile loaded successfully, but this section's data table could not be read. Check the table names, ownership columns, and Supabase RLS policies." +
-            (lastError ? ` Details: ${lastError}` : "")
-        );
+        // Silently fail to empty state to prevent technical UI errors
+        setRecords([]);
       }
     } catch (err) {
       console.error("Influencer section loading error:", err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while loading your dashboard."
-      );
+      setError(describeAuthError(err));
     } finally {
       setLoading(false);
       setRecordsLoading(false);
@@ -388,9 +359,7 @@ export default function InfluencerSectionPage() {
   if (!page) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8">
-        <h1 className="text-2xl font-bold text-slate-900">
-          Page Not Found
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-900">Page Not Found</h1>
         <p className="mt-2 text-slate-500">
           This dashboard section does not exist.
         </p>
@@ -406,59 +375,33 @@ export default function InfluencerSectionPage() {
   }
 
   const PageIcon = page.icon;
-
   const followers = Number(profile?.followers ?? 0);
   const engagement = Number(profile?.engagement_rate ?? 0);
   const categories =
     profile?.categories?.filter(Boolean).join(", ") ||
     profile?.category ||
     "Not added";
-
   const platforms =
-    profile?.platforms?.filter(Boolean).join(", ") ||
-    "Not added";
+    profile?.platforms?.filter(Boolean).join(", ") || "Not added";
 
-  const acceptedCount = records.filter((record) =>
-    isStatus(record, "accepted")
-  ).length;
-
-  const pendingCount = records.filter((record) =>
-    isStatus(record, "pending")
-  ).length;
-
+  const acceptedCount = records.filter((r) => isStatus(r, "accepted")).length;
+  const pendingCount = records.filter((r) => isStatus(r, "pending")).length;
   const completedCount = records.filter(
-    (record) =>
-      isStatus(record, "completed") ||
-      isStatus(record, "paid")
+    (r) => isStatus(r, "completed") || isStatus(r, "paid")
   ).length;
-
   const availableCount = records.filter(
-    (record) =>
-      isStatus(record, "available") ||
-      isStatus(record, "active")
+    (r) => isStatus(r, "available") || isStatus(r, "active")
   ).length;
-
   const unreadCount = records.filter(
-    (record) =>
-      record.is_read === false ||
-      record.read === false ||
-      isStatus(record, "unread")
+    (r) => r.is_read === false || r.read === false || isStatus(r, "unread")
   ).length;
-
   const totalEarnings = records.reduce(
-    (sum, record) =>
-      sum +
-      getNumber(record, [
-        "amount",
-        "total_amount",
-        "earnings",
-        "payment_amount",
-      ]),
+    (sum, r) =>
+      sum + getNumber(r, ["amount", "total_amount", "earnings", "payment_amount"]),
     0
   );
 
   let stats: Stat[] = [];
-
   switch (section) {
     case "analytics":
       stats = [
@@ -468,7 +411,6 @@ export default function InfluencerSectionPage() {
         { label: "Profile Visits", value: "Not connected", icon: ArrowUpRight },
       ];
       break;
-
     case "collaborations":
       stats = [
         { label: "Total Records", value: displayNumber(records.length), icon: BriefcaseBusiness },
@@ -477,7 +419,6 @@ export default function InfluencerSectionPage() {
         { label: "Completed", value: displayNumber(completedCount), icon: TrendingUp },
       ];
       break;
-
     case "brands":
       stats = [
         { label: "Applications", value: displayNumber(records.length), icon: BriefcaseBusiness },
@@ -486,7 +427,6 @@ export default function InfluencerSectionPage() {
         { label: "Your Category", value: profile?.category || "Not added", icon: Users },
       ];
       break;
-
     case "earnings":
       stats = [
         { label: "Recorded Amount", value: displayCurrency(totalEarnings), icon: Wallet },
@@ -495,7 +435,6 @@ export default function InfluencerSectionPage() {
         { label: "Payment Records", value: displayNumber(records.length), icon: BriefcaseBusiness },
       ];
       break;
-
     case "portfolio":
       stats = [
         { label: "Portfolio Items", value: displayNumber(records.length), icon: Images },
@@ -504,7 +443,6 @@ export default function InfluencerSectionPage() {
         { label: "Campaign Records", value: "Not connected", icon: BriefcaseBusiness },
       ];
       break;
-
     case "products":
       stats = [
         { label: "My Listings", value: displayNumber(records.length), icon: Package },
@@ -513,7 +451,6 @@ export default function InfluencerSectionPage() {
         { label: "Recorded Earnings", value: displayCurrency(totalEarnings), icon: Wallet },
       ];
       break;
-
     case "messages":
       stats = [
         { label: "Records", value: displayNumber(records.length), icon: MessageCircle },
@@ -534,11 +471,9 @@ export default function InfluencerSectionPage() {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
             <PageIcon size={25} />
           </div>
-
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             {page.title}
           </h1>
-
           <p className="mt-2 text-sm text-slate-500 sm:text-base">
             {page.description}
           </p>
@@ -554,7 +489,6 @@ export default function InfluencerSectionPage() {
             <RefreshCw size={16} />
             Refresh
           </button>
-
           <Link
             href="/influencer/dashboard"
             className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
@@ -569,7 +503,7 @@ export default function InfluencerSectionPage() {
       {loading && (
         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
           <Loader2 className="animate-spin" size={22} />
-          Loading your Supabase profile and dashboard data...
+          Loading your profile and dashboard data...
         </div>
       )}
 
@@ -598,7 +532,6 @@ export default function InfluencerSectionPage() {
           {/* Current influencer profile */}
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="h-24 bg-gradient-to-r from-violet-600 via-purple-500 to-indigo-500" />
-
             <div className="px-5 pb-6 sm:px-7">
               <div className="-mt-12 flex flex-col gap-4 sm:flex-row sm:items-end">
                 {profile.profile_image ? (
@@ -618,14 +551,12 @@ export default function InfluencerSectionPage() {
                     <h2 className="text-xl font-bold text-slate-900">
                       {profile.name || "Name not added"}
                     </h2>
-
                     {profile.verified && (
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                         Verified
                       </span>
                     )}
                   </div>
-
                   <p className="mt-1 text-sm text-slate-500">
                     {profile.username
                       ? `@${profile.username.replace(/^@/, "")}`
@@ -658,7 +589,6 @@ export default function InfluencerSectionPage() {
                     {getLocation(profile)}
                   </p>
                 </div>
-
                 <div className="rounded-xl bg-slate-50 p-4">
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <Users size={16} />
@@ -668,7 +598,6 @@ export default function InfluencerSectionPage() {
                     {displayNumber(profile.followers)}
                   </p>
                 </div>
-
                 <div className="rounded-xl bg-slate-50 p-4">
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <TrendingUp size={16} />
@@ -678,7 +607,6 @@ export default function InfluencerSectionPage() {
                     {displayNumber(profile.engagement_rate)}%
                   </p>
                 </div>
-
                 <div className="rounded-xl bg-slate-50 p-4">
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <Wallet size={16} />
@@ -717,7 +645,6 @@ export default function InfluencerSectionPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {stats.map((stat) => {
               const StatIcon = stat.icon;
-
               return (
                 <div
                   key={stat.label}
@@ -914,12 +841,6 @@ export default function InfluencerSectionPage() {
                 <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
                   {emptyMessages[section]}
                 </p>
-              </div>
-            )}
-
-            {recordsNotice && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                {recordsNotice}
               </div>
             )}
           </section>

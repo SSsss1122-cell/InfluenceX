@@ -127,15 +127,21 @@ const Footer = () => {
             <p className="text-sm leading-relaxed mb-4">
               Subscribe to get tips, product updates, and exclusive offers.
             </p>
-            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
+            <form
+              onSubmit={handleSubmit}
+              suppressHydrationWarning
+              className="flex flex-col sm:flex-row gap-2"
+            >
               <input
                 type="email"
                 placeholder="Your email"
                 required
+                suppressHydrationWarning
                 className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
               <button
                 type="submit"
+                suppressHydrationWarning
                 className="inline-flex items-center justify-center gap-2 px-5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-purple-500/30 transition-all duration-300 hover:scale-105"
               >
                 <Send className="w-4 h-4" />

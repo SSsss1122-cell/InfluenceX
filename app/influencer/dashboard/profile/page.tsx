@@ -1,8 +1,8 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Country, State, City } from "country-state-city";
 import {
   UserRound,
   MapPin,
@@ -17,6 +17,7 @@ import {
   X,
   RefreshCw,
 } from "lucide-react";
+import { FaInstagram, FaYoutube } from "react-icons/fa";
 
 type InfluencerProfile = {
   id: string;
@@ -39,6 +40,8 @@ type InfluencerProfile = {
   gender: string | null;
   available: boolean | null;
   verified?: boolean | null;
+  youtube_url: string | null;
+  instagram_url: string | null;
 };
 
 type EditableFields = {
@@ -49,6 +52,7 @@ type EditableFields = {
   state: string;
   city: string;
   category: string;
+  custom_category: string;
   categories: string;
   platforms: string;
   followers: string;
@@ -59,7 +63,18 @@ type EditableFields = {
   cover_image: string;
   gender: string;
   available: boolean;
+  youtube_url: string;
+  instagram_url: string;
 };
+
+// Fetch all Indian states from the package
+const allStates = State.getStatesOfCountry("IN");
+
+const categoryOptions = [
+  "Fashion", "Beauty", "Tech", "Gaming", "Travel", "Food", "Fitness",
+  "Lifestyle", "Education", "Finance", "Comedy", "Motivation", "Philosophy",
+  "Entrepreneur", "Life Coach", "Other"
+];
 
 const emptyForm: EditableFields = {
   name: "",
@@ -69,6 +84,7 @@ const emptyForm: EditableFields = {
   state: "",
   city: "",
   category: "",
+  custom_category: "",
   categories: "",
   platforms: "",
   followers: "",
@@ -79,15 +95,19 @@ const emptyForm: EditableFields = {
   cover_image: "",
   gender: "",
   available: true,
+  youtube_url: "",
+  instagram_url: "",
 };
 
 const inputClass =
   "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
 
 const publicFields =
-  "id,user_id,name,username,bio,location,state,city,category,categories,platforms,followers,engagement_rate,influencer_type,starting_price,profile_image,cover_image,gender,available,verified";
+  "id,user_id,name,username,bio,location,state,city,category,categories,platforms,followers,engagement_rate,influencer_type,starting_price,profile_image,cover_image,gender,available,verified,youtube_url,instagram_url";
 
 function toForm(row: InfluencerProfile): EditableFields {
+  const isCustomCategory = row.category && !categoryOptions.includes(row.category);
+  
   return {
     name: row.name ?? "",
     username: row.username ?? "",
@@ -95,7 +115,8 @@ function toForm(row: InfluencerProfile): EditableFields {
     location: row.location ?? "",
     state: row.state ?? "",
     city: row.city ?? "",
-    category: row.category ?? "",
+    category: isCustomCategory ? "Other" : (row.category ?? ""),
+    custom_category: isCustomCategory ? row.category ?? "" : "",
     categories: (row.categories ?? []).join(", "),
     platforms: (row.platforms ?? []).join(", "),
     followers: row.followers?.toString() ?? "",
@@ -106,6 +127,8 @@ function toForm(row: InfluencerProfile): EditableFields {
     cover_image: row.cover_image ?? "",
     gender: row.gender ?? "",
     available: row.available ?? true,
+    youtube_url: row.youtube_url ?? "",
+    instagram_url: row.instagram_url ?? "",
   };
 }
 
@@ -140,13 +163,12 @@ export default function InfluencerProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Real influencer records fetched from Supabase.
+  // Real influencer records fetched from the database.
   const [influencers, setInfluencers] = useState<InfluencerProfile[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
   const [search, setSearch] = useState("");
-  const [selectedInfluencer, setSelectedInfluencer] =
-    useState<InfluencerProfile | null>(null);
+  const [selectedInfluencer, setSelectedInfluencer] = useState<InfluencerProfile | null>(null);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -193,9 +215,7 @@ export default function InfluencerProfilePage() {
     } catch (err: unknown) {
       console.error("Load own influencer profile:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load your profile."
+        err instanceof Error ? err.message : "Unable to load your profile."
       );
     } finally {
       setLoading(false);
@@ -207,7 +227,6 @@ export default function InfluencerProfilePage() {
     setDirectoryError("");
 
     try {
-      // Fetch real rows; do not create frontend dummy profiles.
       const { data, error: queryError } = await supabase
         .from("influencers")
         .select(publicFields)
@@ -219,9 +238,7 @@ export default function InfluencerProfilePage() {
     } catch (err: unknown) {
       console.error("Load influencer directory:", err);
       setDirectoryError(
-        err instanceof Error
-          ? err.message
-          : "Unable to fetch influencers from Supabase."
+        err instanceof Error ? err.message : "Unable to fetch influencers right now."
       );
     } finally {
       setDirectoryLoading(false);
@@ -237,9 +254,40 @@ export default function InfluencerProfilePage() {
     key: K,
     value: EditableFields[K]
   ) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      
+      // Auto-fill location when state or city changes
+      if (key === "state" || key === "city") {
+        // If state changes, reset city
+        if (key === "state") {
+          next.city = "";
+        }
+        
+        if (next.city && next.state) {
+          next.location = `${next.city}, ${next.state}`;
+        } else if (next.state) {
+          next.location = next.state;
+        } else {
+          next.location = "";
+        }
+      }
+      
+      return next;
+    });
     setSuccess("");
     setError("");
+  }
+
+  function togglePlatform(platform: string) {
+    const current = form.platforms.split(",").map(p => p.trim()).filter(Boolean);
+    let updated;
+    if (current.includes(platform)) {
+      updated = current.filter(p => p !== platform);
+    } else {
+      updated = [...current, platform];
+    }
+    updateField("platforms", updated.join(", "));
   }
 
   async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
@@ -255,41 +303,28 @@ export default function InfluencerProfilePage() {
       } = await supabase.auth.getUser();
 
       if (authError || !user || user.id !== userId) {
-        throw new Error(
-          "Your login session has changed. Please log in again."
-        );
+        throw new Error("Your login session has changed. Please log in again.");
       }
 
       if (!recordId) {
         throw new Error("Your influencer profile is not linked.");
       }
 
-      const followers = form.followers.trim()
-        ? Number(form.followers)
-        : null;
-
-      const engagement = form.engagement_rate.trim()
-        ? Number(form.engagement_rate)
-        : null;
-
-      const price = form.starting_price.trim()
-        ? Number(form.starting_price)
-        : null;
+      const followers = form.followers.trim() ? Number(form.followers) : null;
+      const engagement = form.engagement_rate.trim() ? Number(form.engagement_rate) : null;
+      const price = form.starting_price.trim() ? Number(form.starting_price) : null;
 
       if (
-        (followers !== null &&
-          (!Number.isSafeInteger(followers) || followers < 0)) ||
-        (engagement !== null &&
-          (!Number.isFinite(engagement) ||
-            engagement < 0 ||
-            engagement > 100)) ||
-        (price !== null &&
-          (!Number.isFinite(price) || price < 0))
+        (followers !== null && (!Number.isSafeInteger(followers) || followers < 0)) ||
+        (engagement !== null && (!Number.isFinite(engagement) || engagement < 0 || engagement > 100)) ||
+        (price !== null && (!Number.isFinite(price) || price < 0))
       ) {
         throw new Error(
           "Enter valid follower and price values. Engagement rate must be between 0 and 100."
         );
       }
+
+      const finalCategory = form.category === "Other" ? form.custom_category.trim() : form.category;
 
       const payload = {
         name: form.name.trim(),
@@ -298,15 +333,9 @@ export default function InfluencerProfilePage() {
         location: form.location.trim(),
         state: form.state.trim(),
         city: form.city.trim(),
-        category: form.category.trim(),
-        categories: form.categories
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        platforms: form.platforms
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
+        category: finalCategory,
+        categories: form.categories.split(",").map((value) => value.trim()).filter(Boolean),
+        platforms: form.platforms.split(",").map((value) => value.trim()).filter(Boolean),
         followers,
         engagement_rate: engagement,
         influencer_type: form.influencer_type,
@@ -315,6 +344,8 @@ export default function InfluencerProfilePage() {
         cover_image: form.cover_image.trim(),
         gender: form.gender.trim(),
         available: form.available,
+        youtube_url: form.youtube_url.trim() || null,
+        instagram_url: form.instagram_url.trim() || null,
       };
 
       const { data, error: updateError } = await supabase
@@ -328,28 +359,18 @@ export default function InfluencerProfilePage() {
       if (updateError) throw updateError;
 
       if (!data) {
-        throw new Error(
-          "Your profile was not updated. Check your Supabase UPDATE policy and account ownership."
-        );
+        throw new Error("Your profile was not updated. Check your database policies and account ownership.");
       }
 
       const updated = data as InfluencerProfile;
 
       setForm(toForm(updated));
-      setInfluencers((current) =>
-        current.map((item) =>
-          item.id === updated.id ? updated : item
-        )
-      );
+      setInfluencers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
 
       setSuccess("Your profile was updated successfully.");
     } catch (err: unknown) {
       console.error("Save influencer profile:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while saving your profile."
-      );
+      setError(err instanceof Error ? err.message : "Something went wrong while saving your profile.");
     } finally {
       setSaving(false);
     }
@@ -357,7 +378,6 @@ export default function InfluencerProfilePage() {
 
   const filteredInfluencers = influencers.filter((item) => {
     const query = search.trim().toLowerCase();
-
     if (!query) return true;
 
     const searchable = [
@@ -369,13 +389,15 @@ export default function InfluencerProfilePage() {
       item.category,
       ...(item.categories ?? []),
       ...(item.platforms ?? []),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+    ].filter(Boolean).join(" ").toLowerCase();
 
     return searchable.includes(query);
   });
+
+  // Get cities based on selected state
+  const availableCities = form.state
+    ? City.getCitiesOfState("IN", allStates.find((s) => s.name === form.state)?.isoCode ?? "")
+    : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -384,12 +406,9 @@ export default function InfluencerProfilePage() {
         <p className="text-sm font-semibold text-violet-600">
           CREATOR SETTINGS
         </p>
-
         <h1 className="mt-2 text-3xl font-bold">My Profile</h1>
-
         <p className="mt-2 text-sm text-slate-500">
-          Edit your own information and browse real influencers registered
-          on InfluenceX.
+          Edit your own information and browse real influencers registered on InfluenceX.
         </p>
       </section>
 
@@ -413,16 +432,13 @@ export default function InfluencerProfilePage() {
                   <UserRound size={32} />
                 )}
               </div>
-
               <div>
                 <h2 className="text-xl font-bold">
                   {form.name || "Your creator name"}
                 </h2>
-
                 <p className="mt-1 text-sm text-violet-100">
                   {form.username ? `@${form.username}` : "Add your username"}
                 </p>
-
                 <p className="mt-2 flex items-center gap-1 text-xs text-violet-100">
                   <MapPin size={13} />
                   {form.location || "Add your location"}
@@ -451,9 +467,7 @@ export default function InfluencerProfilePage() {
                   <input
                     className={inputClass}
                     value={form.username}
-                    onChange={(e) =>
-                      updateField("username", e.target.value)
-                    }
+                    onChange={(e) => updateField("username", e.target.value)}
                   />
                 </label>
 
@@ -475,9 +489,7 @@ export default function InfluencerProfilePage() {
                     type="url"
                     className={inputClass}
                     value={form.profile_image}
-                    onChange={(e) =>
-                      updateField("profile_image", e.target.value)
-                    }
+                    onChange={(e) => updateField("profile_image", e.target.value)}
                     placeholder="https://..."
                   />
                 </label>
@@ -488,9 +500,7 @@ export default function InfluencerProfilePage() {
                     type="url"
                     className={inputClass}
                     value={form.cover_image}
-                    onChange={(e) =>
-                      updateField("cover_image", e.target.value)
-                    }
+                    onChange={(e) => updateField("cover_image", e.target.value)}
                     placeholder="https://..."
                   />
                 </label>
@@ -502,55 +512,77 @@ export default function InfluencerProfilePage() {
 
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
                 <label className="text-sm font-medium">
-                  City
-                  <input
-                    className={inputClass}
-                    value={form.city}
-                    onChange={(e) => updateField("city", e.target.value)}
-                  />
-                </label>
-
-                <label className="text-sm font-medium">
                   State
-                  <input
+                  <select
                     className={inputClass}
                     value={form.state}
                     onChange={(e) => updateField("state", e.target.value)}
-                  />
+                  >
+                    <option value="">Select a state...</option>
+                    {allStates.map((state) => (
+                      <option key={state.isoCode} value={state.name}>{state.name}</option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="text-sm font-medium">
-                  Location
-                  <input
+                  City
+                  <select
                     className={inputClass}
+                    value={form.city}
+                    onChange={(e) => updateField("city", e.target.value)}
+                    disabled={!form.state}
+                  >
+                    <option value="">Select a city...</option>
+                    {availableCities.map((city) => (
+                      <option key={city.name} value={city.name}>{city.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm font-medium sm:col-span-2">
+                  Location (Auto-filled)
+                  <input
+                    className={`${inputClass} bg-slate-50 text-slate-500`}
                     value={form.location}
-                    onChange={(e) =>
-                      updateField("location", e.target.value)
-                    }
+                    onChange={(e) => updateField("location", e.target.value)}
                     placeholder="City, State"
-                  />
-                </label>
-
-                <label className="text-sm font-medium">
-                  Primary category
-                  <input
-                    className={inputClass}
-                    value={form.category}
-                    onChange={(e) =>
-                      updateField("category", e.target.value)
-                    }
-                    placeholder="Fashion, Beauty, Tech..."
+                    readOnly
                   />
                 </label>
 
                 <label className="text-sm font-medium sm:col-span-2">
-                  Categories (comma-separated)
+                  Primary category
+                  <select
+                    className={inputClass}
+                    value={form.category}
+                    onChange={(e) => updateField("category", e.target.value)}
+                  >
+                    <option value="">Select a primary category...</option>
+                    {categoryOptions.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {form.category === "Other" && (
+                  <label className="text-sm font-medium sm:col-span-2">
+                    Custom Category
+                    <input
+                      className={inputClass}
+                      value={form.custom_category}
+                      onChange={(e) => updateField("custom_category", e.target.value)}
+                      placeholder="Type your custom category"
+                    />
+                  </label>
+                )}
+
+                <label className="text-sm font-medium sm:col-span-2">
+                  Sub-categories (comma-separated)
                   <input
                     className={inputClass}
                     value={form.categories}
-                    onChange={(e) =>
-                      updateField("categories", e.target.value)
-                    }
+                    onChange={(e) => updateField("categories", e.target.value)}
                     placeholder="Fashion, Lifestyle, Beauty"
                   />
                 </label>
@@ -561,32 +593,95 @@ export default function InfluencerProfilePage() {
               <h3 className="font-bold">Social Presence and Pricing</h3>
 
               <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <label className="text-sm font-medium">
-                  Platforms (comma-separated)
-                  <input
-                    className={inputClass}
-                    value={form.platforms}
-                    onChange={(e) =>
-                      updateField("platforms", e.target.value)
-                    }
-                    placeholder="Instagram, YouTube"
-                  />
-                </label>
+                <div className="sm:col-span-2">
+                  <label className="text-sm font-medium">
+                    Platforms
+                  </label>
+                  <div className="mt-2 flex gap-4">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={form.platforms.includes("Instagram")}
+                        onChange={() => togglePlatform("Instagram")}
+                        className="h-4 w-4 accent-violet-600"
+                      />
+                      <FaInstagram className="h-4 w-4 text-pink-600" />
+                      Instagram
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={form.platforms.includes("YouTube")}
+                        onChange={() => togglePlatform("YouTube")}
+                        className="h-4 w-4 accent-violet-600"
+                      />
+                      <FaYoutube className="h-4 w-4 text-red-600" />
+                      YouTube
+                    </label>
+                  </div>
+                </div>
 
                 <label className="text-sm font-medium">
                   Influencer type
                   <select
                     className={inputClass}
                     value={form.influencer_type}
-                    onChange={(e) =>
-                      updateField("influencer_type", e.target.value)
-                    }
+                    onChange={(e) => updateField("influencer_type", e.target.value)}
                   >
                     <option value="Nano">Nano</option>
                     <option value="Micro">Micro</option>
                     <option value="Macro">Macro</option>
                     <option value="Mega">Mega</option>
                   </select>
+                </label>
+
+                <label className="text-sm font-medium">
+                  Gender
+                  <select
+                    className={inputClass}
+                    value={form.gender}
+                    onChange={(e) => updateField("gender", e.target.value)}
+                  >
+                    <option value="">Select gender...</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </label>
+
+                <label className="text-sm font-medium">
+                  YouTube Profile URL
+                  <div className="relative">
+                    <FaYoutube
+                      size={18}
+                      className="absolute left-4 top-5 -translate-y-1/2 text-red-500"
+                    />
+                    <input
+                      type="url"
+                      className={`${inputClass} pl-11`}
+                      value={form.youtube_url}
+                      onChange={(e) => updateField("youtube_url", e.target.value)}
+                      placeholder="https://youtube.com/@yourchannel"
+                    />
+                  </div>
+                </label>
+
+                <label className="text-sm font-medium">
+                  Instagram Profile URL
+                  <div className="relative">
+                    <FaInstagram
+                      size={18}
+                      className="absolute left-4 top-5 -translate-y-1/2 text-pink-500"
+                    />
+                    <input
+                      type="url"
+                      className={`${inputClass} pl-11`}
+                      value={form.instagram_url}
+                      onChange={(e) => updateField("instagram_url", e.target.value)}
+                      placeholder="https://instagram.com/yourhandle"
+                    />
+                  </div>
                 </label>
 
                 <label className="text-sm font-medium">
@@ -597,9 +692,7 @@ export default function InfluencerProfilePage() {
                     step="1"
                     className={inputClass}
                     value={form.followers}
-                    onChange={(e) =>
-                      updateField("followers", e.target.value)
-                    }
+                    onChange={(e) => updateField("followers", e.target.value)}
                   />
                 </label>
 
@@ -612,13 +705,11 @@ export default function InfluencerProfilePage() {
                     step="0.01"
                     className={inputClass}
                     value={form.engagement_rate}
-                    onChange={(e) =>
-                      updateField("engagement_rate", e.target.value)
-                    }
+                    onChange={(e) => updateField("engagement_rate", e.target.value)}
                   />
                 </label>
 
-                <label className="text-sm font-medium">
+                <label className="text-sm font-medium sm:col-span-2">
                   Starting price (₹)
                   <input
                     type="number"
@@ -626,18 +717,7 @@ export default function InfluencerProfilePage() {
                     step="1"
                     className={inputClass}
                     value={form.starting_price}
-                    onChange={(e) =>
-                      updateField("starting_price", e.target.value)
-                    }
-                  />
-                </label>
-
-                <label className="text-sm font-medium">
-                  Gender
-                  <input
-                    className={inputClass}
-                    value={form.gender}
-                    onChange={(e) => updateField("gender", e.target.value)}
+                    onChange={(e) => updateField("starting_price", e.target.value)}
                   />
                 </label>
               </div>
@@ -646,9 +726,7 @@ export default function InfluencerProfilePage() {
                 <input
                   type="checkbox"
                   checked={form.available}
-                  onChange={(e) =>
-                    updateField("available", e.target.checked)
-                  }
+                  onChange={(e) => updateField("available", e.target.checked)}
                   className="h-4 w-4 accent-violet-600"
                 />
                 <span>
@@ -701,8 +779,7 @@ export default function InfluencerProfilePage() {
                 Your profile is not linked yet
               </h2>
               <p className="mt-2 text-sm leading-6 text-amber-800">
-                {error ||
-                  "Link your Supabase Auth user ID to your influencer record to edit your profile."}
+                {error || "Link your Auth user ID to your influencer record to edit your profile."}
               </p>
               <button
                 onClick={() => void loadProfile()}
@@ -715,7 +792,7 @@ export default function InfluencerProfilePage() {
         </div>
       )}
 
-      {/* REAL SUPABASE INFLUENCER DIRECTORY */}
+      {/* INFLUENCER DIRECTORY */}
       <section className="space-y-5">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
@@ -726,7 +803,7 @@ export default function InfluencerProfilePage() {
               Discover Influencers
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Real records loaded from your Supabase influencers table.
+              Real records loaded from your influencers table.
             </p>
           </div>
 
@@ -768,7 +845,7 @@ export default function InfluencerProfilePage() {
         {directoryLoading ? (
           <div className="flex min-h-40 items-center justify-center gap-3 text-slate-500">
             <LoaderCircle className="animate-spin" />
-            Fetching influencers from Supabase...
+            Fetching influencers...
           </div>
         ) : !directoryError && filteredInfluencers.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
@@ -778,7 +855,7 @@ export default function InfluencerProfilePage() {
             </h3>
             <p className="mt-2 text-sm text-slate-500">
               {influencers.length === 0
-                ? "No accessible records were returned from your influencers table. Check your Supabase data and SELECT policies."
+                ? "No accessible records were returned from your influencers table. Check your database data and SELECT policies."
                 : "Try another search term."}
             </p>
           </div>
@@ -807,7 +884,6 @@ export default function InfluencerProfilePage() {
                         className="h-full w-full object-cover"
                       />
                     )}
-
                     {isOwnProfile && (
                       <span className="absolute right-3 top-3 rounded-full bg-white px-3 py-1 text-xs font-semibold text-violet-700 shadow-sm">
                         Your profile
@@ -832,7 +908,6 @@ export default function InfluencerProfilePage() {
                           </div>
                         )}
                       </div>
-
                       {item.verified && (
                         <span className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
                           <BadgeCheck size={16} />
@@ -844,7 +919,6 @@ export default function InfluencerProfilePage() {
                     <h3 className="mt-4 text-lg font-bold">
                       {item.name || "Name not added"}
                     </h3>
-
                     <p className="mt-1 text-sm text-slate-500">
                       {item.username
                         ? `@${item.username.replace(/^@/, "")}`
@@ -863,7 +937,6 @@ export default function InfluencerProfilePage() {
                           {formatFollowers(item.followers)}
                         </p>
                       </div>
-
                       <div className="rounded-xl bg-slate-50 p-3">
                         <p className="text-xs text-slate-500">Engagement</p>
                         <p className="mt-1 font-bold">
@@ -896,14 +969,11 @@ export default function InfluencerProfilePage() {
 
                     <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
                       <div>
-                        <p className="text-xs text-slate-500">
-                          Starting price
-                        </p>
+                        <p className="text-xs text-slate-500">Starting price</p>
                         <p className="mt-1 text-sm font-bold">
                           {formatPrice(item.starting_price)}
                         </p>
                       </div>
-
                       <button
                         type="button"
                         onClick={() => setSelectedInfluencer(item)}
@@ -942,7 +1012,6 @@ export default function InfluencerProfilePage() {
                   className="h-full w-full object-cover"
                 />
               )}
-
               <button
                 type="button"
                 aria-label="Close influencer details"
@@ -962,23 +1031,16 @@ export default function InfluencerProfilePage() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  (selectedInfluencer.name ||
-                    selectedInfluencer.username ||
-                    "I"
-                  )
+                  (selectedInfluencer.name || selectedInfluencer.username || "I")
                     .charAt(0)
                     .toUpperCase()
                 )}
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <h2
-                  id="influencer-detail-title"
-                  className="text-2xl font-bold"
-                >
+                <h2 id="influencer-detail-title" className="text-2xl font-bold">
                   {selectedInfluencer.name || "Name not added"}
                 </h2>
-
                 {selectedInfluencer.verified && (
                   <BadgeCheck className="text-blue-600" size={21} />
                 )}
@@ -1008,7 +1070,6 @@ export default function InfluencerProfilePage() {
                     {formatFollowers(selectedInfluencer.followers)}
                   </p>
                 </div>
-
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">Engagement</p>
                   <p className="mt-1 font-bold">
@@ -1017,7 +1078,6 @@ export default function InfluencerProfilePage() {
                       : "—"}
                   </p>
                 </div>
-
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">Starting price</p>
                   <p className="mt-1 font-bold">
@@ -1043,8 +1103,7 @@ export default function InfluencerProfilePage() {
                     Social platforms
                   </p>
                   <p className="mt-1 text-sm">
-                    {selectedInfluencer.platforms?.join(", ") ||
-                      "Not specified"}
+                    {selectedInfluencer.platforms?.join(", ") || "Not specified"}
                   </p>
                 </div>
 
@@ -1068,9 +1127,7 @@ export default function InfluencerProfilePage() {
                         : "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    {selectedInfluencer.available
-                      ? "Available"
-                      : "Unavailable"}
+                    {selectedInfluencer.available ? "Available" : "Unavailable"}
                   </span>
                 </div>
               </div>

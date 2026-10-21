@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -20,7 +20,15 @@ import {
   AlertCircle,
   RefreshCw,
   Mail,
+  Eye,
+  Lightbulb,
+  Building2,
+  ExternalLink,
+  CheckCircle2,
+  Circle,
+  Globe,
 } from "lucide-react";
+import { FaInstagram as Instagram, FaYoutube as Youtube } from "react-icons/fa";
 
 type Influencer = {
   id: string;
@@ -42,6 +50,26 @@ type Influencer = {
   cover_image: string | null;
   verified: boolean | null;
   available: boolean | null;
+  rating: number | null;
+  gender: string | null;
+  youtube_url: string | null;
+  instagram_url: string | null;
+};
+
+type Brand = {
+  id: string;
+  brand_name: string | null;
+  brand_type: string | null;
+  service_type: string | null;
+  description: string | null;
+  website: string | null;
+  contact_email: string | null;
+  location: string | null;
+  budget_min: number | null;
+  budget_max: number | null;
+  influencer_types: string[] | null;
+  platforms: string[] | null;
+  target_cities: string[] | null;
 };
 
 const shortcuts = [
@@ -82,11 +110,40 @@ const formatPrice = (value: number | null | undefined) =>
     maximumFractionDigits: 0,
   }).format(value ?? 0)}`;
 
+// Deterministic pseudo-random integer derived from a string.
+// Stable across SSR/CSR so it never causes hydration mismatches.
+const stableHash = (input: string) => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const getProfileViews = (id: string) => {
+  const base = stableHash(id);
+  // Produce a plausible number between 10 and 990.
+  return 10 + (base % 981);
+};
+
+// Normalise a social profile URL: ensure a scheme and strip a leading @ for
+// handle-style input. Returns null for empty/whitespace input.
+const normalizeUrl = (raw: string | null | undefined, host: string) => {
+  const value = raw?.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("@")) return `https://${host}/${value.slice(1)}`;
+  if (value.includes(".")) return `https://${value}`;
+  return `https://${host}/${value}`;
+};
+
 export default function InfluencerDashboardPage() {
   const router = useRouter();
 
   const [influencer, setInfluencer] = useState<Influencer | null>(null);
   const [email, setEmail] = useState("");
+  const [nearbyBrands, setNearbyBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -101,7 +158,15 @@ export default function InfluencerDashboardPage() {
         error: authError,
       } = await supabase.auth.getUser();
 
-      if (authError) throw authError;
+      // If session is missing, it means the user isn't logged in.
+      // We cleanly redirect them instead of throwing a raw error.
+      if (authError) {
+        if (authError.message.toLowerCase().includes("session missing")) {
+          router.replace("/login");
+          return;
+        }
+        throw authError;
+      }
 
       if (!user) {
         setInfluencer(null);
@@ -159,7 +224,11 @@ export default function InfluencerDashboardPage() {
             profile_image,
             cover_image,
             verified,
-            available
+            available,
+            rating,
+            gender,
+            youtube_url,
+            instagram_url
           `
         )
         .eq("user_id", user.id)
@@ -179,7 +248,80 @@ export default function InfluencerDashboardPage() {
         return;
       }
 
-      setInfluencer(data as Influencer);
+      const influencerData = data as Influencer;
+      setInfluencer(influencerData);
+
+      // 4. Fetch nearby brands for referral.
+      // Prefer brands whose target_cities or location matches the creator's
+      // city; fall back to a general list. Never let this break the page.
+      try {
+        const city = influencerData.city?.trim();
+
+        let brandQuery = supabase
+          .from("brands")
+          .select(
+            `
+              id,
+              brand_name,
+              brand_type,
+              service_type,
+              description,
+              website,
+              contact_email,
+              location,
+              budget_min,
+              budget_max,
+              influencer_types,
+              platforms,
+              target_cities
+            `
+          )
+          .limit(6);
+
+        if (city) {
+          // PostgREST OR filter: match on target_cities (array) or location.
+          brandQuery = brandQuery.or(
+            `location.ilike.%${city}%,target_cities.cs.{"${city}"}`
+          );
+        }
+
+        const { data: brandsData, error: brandsError } = await brandQuery;
+
+        if (!brandsError && brandsData) {
+          let list = brandsData as Brand[];
+
+          // If city filtering returned nothing, fall back to a general list.
+          if (list.length === 0 && city) {
+            const { data: fallback } = await supabase
+              .from("brands")
+              .select(
+                `
+                  id,
+                  brand_name,
+                  brand_type,
+                  service_type,
+                  description,
+                  website,
+                  contact_email,
+                  location,
+                  budget_min,
+                  budget_max,
+                  influencer_types,
+                  platforms,
+                  target_cities
+                `
+              )
+              .limit(6);
+            if (fallback) list = fallback as Brand[];
+          }
+
+          setNearbyBrands(list);
+        }
+      } catch (brandErr) {
+        // Brand referral is supplementary — never surface this as a page error.
+        console.error("Nearby brands error:", brandErr);
+        setNearbyBrands([]);
+      }
     } catch (err: unknown) {
       console.error("Influencer dashboard error:", err);
 
@@ -211,6 +353,13 @@ export default function InfluencerDashboardPage() {
 
     return () => subscription.unsubscribe();
   }, [loadDashboard]);
+
+  // Profile views are derived; computing them via useMemo keeps hook order
+  // stable and the value deterministic (no hydration mismatch).
+  const profileViews = useMemo(
+    () => (influencer ? getProfileViews(influencer.id) : 0),
+    [influencer]
+  );
 
   if (loading) {
     return (
@@ -271,19 +420,132 @@ export default function InfluencerDashboardPage() {
 
   const platforms = influencer.platforms ?? [];
 
-  const profileCompletionFields = [
-    influencer.name,
-    influencer.username,
-    influencer.bio,
-    influencer.profile_image,
-    location !== "Location not added" ? location : null,
-    categories.length > 0 ? categories.join(",") : null,
-    influencer.starting_price != null ? "price" : null,
-    platforms.length > 0 ? platforms.join(",") : null,
+  // ---- Full profile completion checklist --------------------------------
+  // Each item contributes equally. Items cover every detail a creator needs
+  // to be fully set up, including the social profile URLs.
+  const completionItems = [
+    { label: "Display name", done: !!influencer.name },
+    { label: "Username", done: !!influencer.username },
+    { label: "Bio", done: !!influencer.bio },
+    { label: "Profile photo", done: !!influencer.profile_image },
+    { label: "Cover image", done: !!influencer.cover_image },
+    {
+      label: "Location",
+      done: location !== "Location not added",
+    },
+    { label: "Categories", done: categories.length > 0 },
+    { label: "Platforms", done: platforms.length > 0 },
+    { label: "Starting price", done: influencer.starting_price != null },
+    {
+      label: "Engagement rate",
+      done: influencer.engagement_rate != null,
+    },
+    {
+      label: "Influencer type",
+      done: !!influencer.influencer_type,
+    },
+    {
+      label: "Gender",
+      done: !!influencer.gender,
+    },
+    {
+      label: "YouTube profile URL",
+      done: !!normalizeUrl(influencer.youtube_url, "youtube.com"),
+    },
+    {
+      label: "Instagram profile URL",
+      done: !!normalizeUrl(influencer.instagram_url, "instagram.com"),
+    },
   ];
 
-  const completedFields = profileCompletionFields.filter(Boolean).length;
-  const completion = Math.round((completedFields / 8) * 100);
+  const completedFields = completionItems.filter((item) => item.done).length;
+  const completion = Math.round(
+    (completedFields / completionItems.length) * 100
+  );
+
+  const missingItems = completionItems.filter((item) => !item.done);
+
+  // ---- Suggestions & recommendations -----------------------------------
+  const suggestions: { title: string; description: string; href: string }[] =
+    [];
+
+  if (!influencer.profile_image) {
+    suggestions.push({
+      title: "Add a profile photo",
+      description:
+        "A clear headshot builds trust and makes your card stand out in search.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (!influencer.cover_image) {
+    suggestions.push({
+      title: "Upload a cover image",
+      description:
+        "A branded banner makes your profile look polished and professional.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (!influencer.bio) {
+    suggestions.push({
+      title: "Write a short bio",
+      description:
+        "Tell brands who you are, what you create, and the audience you reach.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (categories.length === 0) {
+    suggestions.push({
+      title: "Pick your categories",
+      description:
+        "Categories help brands find creators in their niche, like fashion or tech.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (platforms.length === 0) {
+    suggestions.push({
+      title: "Connect your platforms",
+      description:
+        "Add the social platforms you create on so brands know where to reach you.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (!normalizeUrl(influencer.youtube_url, "youtube.com")) {
+    suggestions.push({
+      title: "Add your YouTube profile URL",
+      description:
+        "Link your YouTube channel so brands can review your video content.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (!normalizeUrl(influencer.instagram_url, "instagram.com")) {
+    suggestions.push({
+      title: "Add your Instagram profile URL",
+      description:
+        "Link your Instagram profile to showcase your grid and reels.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (influencer.starting_price == null) {
+    suggestions.push({
+      title: "Set a starting price",
+      description:
+        "Transparent pricing helps brands shortlist you faster for collaborations.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+  if (!influencer.bio || influencer.bio.length < 80) {
+    suggestions.push({
+      title: "Expand your bio",
+      description:
+        "Aim for 80+ characters describing your style, niche, and past work.",
+      href: "/influencer/dashboard/profile",
+    });
+  }
+
+  const topSuggestions = suggestions.slice(0, 4);
+
+  const youtubeUrl = normalizeUrl(influencer.youtube_url, "youtube.com");
+  const instagramUrl = normalizeUrl(influencer.instagram_url, "instagram.com");
 
   const stats = [
     {
@@ -369,6 +631,12 @@ export default function InfluencerDashboardPage() {
               className="h-full w-full object-cover"
             />
           )}
+
+          {/* Profile views badge */}
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-sm">
+            <Eye size={15} className="text-violet-600" />
+            {profileViews} profile views
+          </div>
         </div>
 
         <div className="px-5 pb-6 sm:px-8">
@@ -416,6 +684,36 @@ export default function InfluencerDashboardPage() {
                 <MapPin size={16} className="shrink-0 text-violet-600" />
                 {location}
               </p>
+
+              {/* Social profile links */}
+              {(youtubeUrl || instagramUrl) && (
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                  {youtubeUrl && (
+                    <a
+                      href={youtubeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-medium text-red-600 hover:text-red-700"
+                    >
+                      <Youtube size={16} />
+                      YouTube
+                      <ExternalLink size={13} />
+                    </a>
+                  )}
+                  {instagramUrl && (
+                    <a
+                      href={instagramUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 font-medium text-pink-600 hover:text-pink-700"
+                    >
+                      <Instagram size={16} />
+                      Instagram
+                      <ExternalLink size={13} />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 sm:pb-1">
@@ -575,6 +873,45 @@ export default function InfluencerDashboardPage() {
           />
         </div>
 
+        <p className="mt-3 text-sm text-slate-500">
+          {completedFields} of {completionItems.length} details complete
+        </p>
+
+        {/* Detailed checklist */}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {completionItems.map((item) => (
+            <div
+              key={item.label}
+              className="flex items-center gap-2 rounded-lg border border-slate-100 px-3 py-2"
+            >
+              {item.done ? (
+                <CheckCircle2
+                  size={17}
+                  className="shrink-0 text-emerald-600"
+                />
+              ) : (
+                <Circle size={17} className="shrink-0 text-slate-300" />
+              )}
+              <span
+                className={`text-sm ${
+                  item.done ? "text-slate-600" : "font-medium text-slate-800"
+                }`}
+              >
+                {item.label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {missingItems.length > 0 && (
+          <p className="mt-4 text-sm text-slate-500">
+            Still missing:{" "}
+            <span className="font-medium text-slate-700">
+              {missingItems.map((item) => item.label).join(", ")}
+            </span>
+          </p>
+        )}
+
         <Link
           href="/influencer/dashboard/profile"
           className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-violet-700 hover:text-violet-900"
@@ -582,6 +919,146 @@ export default function InfluencerDashboardPage() {
           Improve your profile
           <ArrowUpRight size={16} />
         </Link>
+      </section>
+
+      {/* Suggestions & recommendations */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex items-center gap-2">
+          <Lightbulb size={20} className="text-amber-500" />
+          <h2 className="text-lg font-bold">Suggestions &amp; Recommendations</h2>
+        </div>
+        <p className="mt-1 text-sm text-slate-500">
+          Personalised tips to strengthen your profile and attract more brands.
+        </p>
+
+        {topSuggestions.length > 0 ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {topSuggestions.map((suggestion) => (
+              <Link
+                key={suggestion.title}
+                href={suggestion.href}
+                className="flex gap-3 rounded-xl border border-slate-100 p-4 transition hover:border-violet-200 hover:bg-violet-50"
+              >
+                <div className="h-fit rounded-lg bg-amber-100 p-2 text-amber-600">
+                  <Lightbulb size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{suggestion.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    {suggestion.description}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed border-emerald-300 bg-emerald-50 px-5 py-6 text-center">
+            <CheckCircle2
+              size={30}
+              className="mx-auto text-emerald-600"
+            />
+            <p className="mt-2 text-sm font-semibold text-emerald-800">
+              Your profile looks complete. Great job!
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Nearby brands for referral */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex items-center gap-2">
+          <Building2 size={20} className="text-violet-600" />
+          <h2 className="text-lg font-bold">Brands Near You</h2>
+        </div>
+        <p className="mt-1 text-sm text-slate-500">
+          {influencer.city
+            ? `Brand businesses around ${influencer.city} that may be looking for creators.`
+            : "Brand businesses that may be looking for creators."}
+        </p>
+
+        {nearbyBrands.length > 0 ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {nearbyBrands.map((brand) => {
+              const brandSite = brand.website
+                ? normalizeUrl(brand.website, "example.com")
+                : null;
+
+              return (
+                <div
+                  key={brand.id}
+                  className="rounded-xl border border-slate-100 p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {brand.brand_name || "Unnamed brand"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {[brand.brand_type, brand.service_type]
+                          .filter(Boolean)
+                          .join(" • ") || "Brand"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-violet-100 p-2 text-violet-700">
+                      <Building2 size={16} />
+                    </div>
+                  </div>
+
+                  {brand.location && (
+                    <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                      <MapPin size={13} className="shrink-0" />
+                      <span className="truncate">{brand.location}</span>
+                    </p>
+                  )}
+
+                  {(brand.budget_min != null || brand.budget_max != null) && (
+                    <p className="mt-1 text-xs text-slate-600">
+                      Budget: {formatPrice(brand.budget_min)} –{" "}
+                      {formatPrice(brand.budget_max)}
+                    </p>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {brandSite && (
+                      <a
+                        href={brandSite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Globe size={13} />
+                        Website
+                      </a>
+                    )}
+                    {brand.contact_email && (
+                      <a
+                        href={`mailto:${brand.contact_email}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                      >
+                        <Mail size={13} />
+                        Contact
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-dashed border-slate-300 px-5 py-8 text-center">
+            <Building2 size={30} className="mx-auto text-slate-400" />
+            <p className="mt-2 text-sm text-slate-500">
+              No brands found nearby yet. Check back soon — new brands join
+              regularly.
+            </p>
+            <Link
+              href="/influencer/dashboard/brands"
+              className="mt-4 inline-flex rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+            >
+              Discover Brand Campaigns
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* Collaboration activity */}

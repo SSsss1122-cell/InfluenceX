@@ -1,4 +1,3 @@
-
 "use client";
 
 import { supabase } from "@/lib/supabase";
@@ -127,14 +126,9 @@ export default function AuthCard() {
             ? metadataRole
             : undefined;
 
-      console.log("Logged in user:", data.user.email);
-      console.log("Profile role:", profileRole);
-      console.log("Metadata role:", metadataRole);
-      console.log("Final detected role:", userRole);
-
       if (!userRole || !validRoles.includes(userRole as Role)) {
         alert(
-          "Your account role is missing or invalid. Please check your role in the Supabase profiles table."
+          "Your account role is missing or invalid. Please check your role in the profiles table."
         );
 
         await supabase.auth.signOut();
@@ -144,15 +138,15 @@ export default function AuthCard() {
       // Redirect according to the user's role.
       switch (userRole as Role) {
         case "brand":
-          router.replace("/brand-dashboard");
+          router.replace("/brand-dashboard"); 
           break;
 
         case "influencer":
-          router.replace("/influencers");
+          router.replace("/influencer/dashboard");
           break;
 
         case "user":
-          router.replace("/");
+          router.replace("/"); // Sends regular users to the homepage to fix 404
           break;
       }
 
