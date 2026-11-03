@@ -52,6 +52,7 @@ type Influencer = {
   username: string;
   category: string;
   categories: string[];
+  bio?: string | null;
   platforms: string[];
   followers: number;
   engagement_rate: number;
