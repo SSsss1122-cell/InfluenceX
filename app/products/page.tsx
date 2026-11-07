@@ -1,4 +1,3 @@
-
 import { Suspense } from "react";
 import ProductListing from "@/components/ProductListing";
 import Footer from "@/components/Footer";
