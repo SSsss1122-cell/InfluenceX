@@ -1,11 +1,14 @@
-import Navbar from "@/components/Navbar";
+
+import { Suspense } from "react";
 import ProductListing from "@/components/ProductListing";
 import Footer from "@/components/Footer";
 
 export default function ProductsPage() {
   return (
     <>
-      <ProductListing />
+      <Suspense fallback={<div>Loading products...</div>}>
+        <ProductListing />
+      </Suspense>
       <Footer />
     </>
   );
